@@ -11,7 +11,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.collections.ArrayList
 
-class TrickleFuzzTests {
+class RefillFuzzTests {
 
     @Test
     fun specificTest1() {
@@ -138,18 +138,18 @@ class TrickleFuzzTests {
         }
     }
 
-    private fun reorderInputs(script: List<FuzzOperation>, definition: TrickleDefinition, random: Random): List<FuzzOperation> {
+    private fun reorderInputs(script: List<FuzzOperation>, definition: RefillDefinition, random: Random): List<FuzzOperation> {
         val reordered = ArrayList<FuzzOperation>()
 
-        val curGroup = ArrayList<TrickleInputChange>()
+        val curGroup = ArrayList<RefillInputChange>()
         fun flushCurGroup() {
             if (curGroup.isEmpty()) {
                 return
             }
             // We want to preserve the order within each NodeName, but shuffle things otherwise
             // Slight caveat: Group keyed inputs with their key source key input
-            fun getRelevantNodeName(change: TrickleInputChange): GenericNodeName {
-                if (change is TrickleInputChange.SetKeyed<*, *>) {
+            fun getRelevantNodeName(change: RefillInputChange): GenericNodeName {
+                if (change is RefillInputChange.SetKeyed<*, *>) {
                     return definition.keyedNodes[change.nodeName]!!.keySourceName
                 }
                 return change.nodeName
@@ -158,7 +158,7 @@ class TrickleFuzzTests {
             val perNameOrdering = curGroup.groupBy(::getRelevantNodeName)
             val newNamesOrdering = namesOnlyOrdering.shuffled(random)
             val perNameIterators = perNameOrdering.mapValues { (_, list) -> list.iterator() }
-            val newChangeOrdering = ArrayList<TrickleInputChange>()
+            val newChangeOrdering = ArrayList<RefillInputChange>()
             for (name in newNamesOrdering) {
                 newChangeOrdering.add(perNameIterators.getValue(name).next())
             }
@@ -177,12 +177,12 @@ class TrickleFuzzTests {
         }
         for (operation in script) {
             val unused: Any = when (operation) {
-                is FuzzOperation.SetBasic -> curGroup.add(TrickleInputChange.SetBasic(operation.name, operation.value))
-                is FuzzOperation.AddKey -> curGroup.add(TrickleInputChange.EditKeys(operation.name, listOf(operation.key), listOf()))
-                is FuzzOperation.RemoveKey -> curGroup.add(TrickleInputChange.EditKeys(operation.name, listOf(), listOf(operation.key)))
-                is FuzzOperation.SetKeyList -> curGroup.add(TrickleInputChange.SetKeys(operation.name, operation.value))
-                is FuzzOperation.EditKeys -> curGroup.add(TrickleInputChange.EditKeys(operation.name, operation.keysAdded, operation.keysRemoved))
-                is FuzzOperation.SetKeyed -> curGroup.add(TrickleInputChange.SetKeyed(operation.name, operation.map))
+                is FuzzOperation.SetBasic -> curGroup.add(RefillInputChange.SetBasic(operation.name, operation.value))
+                is FuzzOperation.AddKey -> curGroup.add(RefillInputChange.EditKeys(operation.name, listOf(operation.key), listOf()))
+                is FuzzOperation.RemoveKey -> curGroup.add(RefillInputChange.EditKeys(operation.name, listOf(), listOf(operation.key)))
+                is FuzzOperation.SetKeyList -> curGroup.add(RefillInputChange.SetKeys(operation.name, operation.value))
+                is FuzzOperation.EditKeys -> curGroup.add(RefillInputChange.EditKeys(operation.name, operation.keysAdded, operation.keysRemoved))
+                is FuzzOperation.SetKeyed -> curGroup.add(RefillInputChange.SetKeyed(operation.name, operation.map))
                 is FuzzOperation.SetMultiple -> curGroup.addAll(operation.changes)
                 is FuzzOperation.CheckBasic -> {
                     flushCurGroup()
@@ -250,7 +250,7 @@ class TrickleFuzzTests {
         }
     }
 
-    private fun checkRawInstance1(instance: TrickleInstance, operations: List<FuzzOperation>) {
+    private fun checkRawInstance1(instance: RefillInstance, operations: List<FuzzOperation>) {
         // Handle cases where a node we query depends only on key list inputs
         instance.completeSynchronously()
         for ((opIndex, op) in operations.withIndex()) {
@@ -303,7 +303,7 @@ class TrickleFuzzTests {
         }
     }
 
-    private fun checkRawInstance2(instance: TrickleInstance, operations: List<FuzzOperation>) {
+    private fun checkRawInstance2(instance: RefillInstance, operations: List<FuzzOperation>) {
         for ((opIndex, op) in operations.withIndex()) {
             try {
                 val unused: Any = when (op) {
@@ -351,7 +351,7 @@ class TrickleFuzzTests {
         }
     }
 
-    private fun checkSyncInstance(instance: TrickleSyncInstance, operations: List<FuzzOperation>) {
+    private fun checkSyncInstance(instance: RefillSyncInstance, operations: List<FuzzOperation>) {
         for ((opIndex, op) in operations.withIndex()) {
             try {
                 val unused: Any = when (op) {
@@ -396,14 +396,14 @@ class TrickleFuzzTests {
     }
 
 
-    private fun checkAsyncInstance1(instance: TrickleAsyncInstance, operations: List<FuzzOperation>) {
+    private fun checkAsyncInstance1(instance: RefillAsyncInstance, operations: List<FuzzOperation>) {
         // TODO: I think this approach just barely works because we're submitting everything to the queue from the same
         // thread and the queue preserves order so that the timestamps end up "later". It may be better to be able to
         // submit a set or list of timestamps and require that it be after all of them.
         // TODO: Revive the "single-timestamp" type as well
-//        var lastTimestamp: TrickleAsyncTimestamp? = null
+//        var lastTimestamp: RefillAsyncTimestamp? = null
         try {
-            val timestamps = ArrayList<TrickleAsyncTimestamp>()
+            val timestamps = ArrayList<RefillAsyncTimestamp>()
             for ((opIndex, op) in operations.withIndex()) {
                 try {
                     val unused: Any = when (op) {
@@ -451,14 +451,14 @@ class TrickleFuzzTests {
     }
 
 
-    private fun checkAsyncInstance2(instance: TrickleAsyncInstance, operations: List<FuzzOperation>) {
+    private fun checkAsyncInstance2(instance: RefillAsyncInstance, operations: List<FuzzOperation>) {
         // TODO: I think this approach just barely works because we're submitting everything to the queue from the same
         // thread and the queue preserves order so that the timestamps end up "later". It may be better to be able to
         // submit a set or list of timestamps and require that it be after all of them.
         // TODO: Revive the "single-timestamp" type as well
-//        var lastTimestamp: TrickleAsyncTimestamp? = null
+//        var lastTimestamp: RefillAsyncTimestamp? = null
         try {
-            var timestamp: TrickleAsyncTimestamp? = null
+            var timestamp: RefillAsyncTimestamp? = null
             for ((opIndex, op) in operations.withIndex()) {
                 try {
                     val unused: Any = when (op) {
@@ -525,9 +525,9 @@ class TrickleFuzzTests {
         }
     }
 
-    private fun checkAsyncInstanceWithListeners(instance: TrickleAsyncInstance, operations: List<FuzzOperation>) {
+    private fun checkAsyncInstanceWithListeners(instance: RefillAsyncInstance, operations: List<FuzzOperation>) {
         val collectedErrors = Collections.synchronizedList(ArrayList<Exception>())
-        val listenedEvents = ConcurrentHashMap<ValueId, TrickleEvent<*>>()
+        val listenedEvents = ConcurrentHashMap<ValueId, RefillEvent<*>>()
         Awaitility.setDefaultPollDelay(0, TimeUnit.MILLISECONDS)
         Awaitility.setDefaultPollInterval(10, TimeUnit.MILLISECONDS)
         try {
@@ -543,7 +543,7 @@ class TrickleFuzzTests {
                         is FuzzOperation.SetMultiple -> instance.setInputs(op.changes)
                         is FuzzOperation.CheckBasic -> {
                             // TODO: Only add one listener per name
-                            instance.addBasicListener(op.name, TrickleEventListener { event ->
+                            instance.addBasicListener(op.name, RefillEventListener { event ->
                                 listenedEvents.merge(event.valueId, event, { event1, event2 ->
                                     if (event2.timestamp > event1.timestamp) {
                                         event2
@@ -563,17 +563,17 @@ class TrickleFuzzTests {
                                     is NodeOutcome.NotYetComputed -> { /* Do nothing */ }
                                     is NodeOutcome.NoSuchKey -> TODO()
                                     is NodeOutcome.Computed -> {
-                                        assertEquals(op.outcome.value, (event as? TrickleEvent.Computed)?.value)
+                                        assertEquals(op.outcome.value, (event as? RefillEvent.Computed)?.value)
                                     }
                                     is NodeOutcome.Failure -> {
-                                        assertEquals(op.outcome.failure, (event as? TrickleEvent.Failure)?.failure)
+                                        assertEquals(op.outcome.failure, (event as? RefillEvent.Failure)?.failure)
                                     }
                                 }
                             }
                         }
                         is FuzzOperation.CheckKeyList -> {
                             // TODO: Only add one listener per name
-                            instance.addKeyListListener(op.name, TrickleEventListener { event ->
+                            instance.addKeyListListener(op.name, RefillEventListener { event ->
                                 listenedEvents.merge(event.valueId, event, { event1, event2 ->
                                     if (event2.timestamp > event1.timestamp) {
                                         event2
@@ -593,17 +593,17 @@ class TrickleFuzzTests {
                                     is NodeOutcome.NotYetComputed -> { /* Do nothing */ }
                                     is NodeOutcome.NoSuchKey -> TODO()
                                     is NodeOutcome.Computed -> {
-                                        assertEquals(op.outcome.value, (event as? TrickleEvent.Computed)?.value)
+                                        assertEquals(op.outcome.value, (event as? RefillEvent.Computed)?.value)
                                     }
                                     is NodeOutcome.Failure -> {
-                                        assertEquals(op.outcome.failure, (event as? TrickleEvent.Failure)?.failure)
+                                        assertEquals(op.outcome.failure, (event as? RefillEvent.Failure)?.failure)
                                     }
                                 }
                             }
                         }
                         is FuzzOperation.CheckKeyedList -> {
                             // TODO: Only add one listener per name
-                            instance.addKeyedListListener(op.name, TrickleEventListener { event ->
+                            instance.addKeyedListListener(op.name, RefillEventListener { event ->
                                 listenedEvents.merge(event.valueId, event, { event1, event2 ->
                                     if (event2.timestamp > event1.timestamp) {
                                         event2
@@ -623,17 +623,17 @@ class TrickleFuzzTests {
                                     is NodeOutcome.NotYetComputed -> { /* Do nothing */ }
                                     is NodeOutcome.NoSuchKey -> TODO()
                                     is NodeOutcome.Computed -> {
-                                        assertEquals(op.outcome.value, (event as? TrickleEvent.Computed)?.value)
+                                        assertEquals(op.outcome.value, (event as? RefillEvent.Computed)?.value)
                                     }
                                     is NodeOutcome.Failure -> {
-                                        assertEquals(op.outcome.failure, (event as? TrickleEvent.Failure)?.failure)
+                                        assertEquals(op.outcome.failure, (event as? RefillEvent.Failure)?.failure)
                                     }
                                 }
                             }
                         }
                         is FuzzOperation.CheckKeyedValue -> {
                             // TODO: Only add one listener per name
-                            instance.addPerKeyListener(op.name, TrickleEventListener { event ->
+                            instance.addPerKeyListener(op.name, RefillEventListener { event ->
                                 listenedEvents.merge(event.valueId, event, { event1, event2 ->
                                     if (event2.timestamp > event1.timestamp) {
                                         event2
@@ -652,13 +652,13 @@ class TrickleFuzzTests {
                                 when (op.outcome) {
                                     is NodeOutcome.NotYetComputed -> { /* Do nothing */ }
                                     is NodeOutcome.NoSuchKey -> {
-                                        assertTrue(event == null || event is TrickleEvent.KeyRemoved)
+                                        assertTrue(event == null || event is RefillEvent.KeyRemoved)
                                     }
                                     is NodeOutcome.Computed -> {
-                                        assertEquals(op.outcome.value, (event as? TrickleEvent.Computed)?.value)
+                                        assertEquals(op.outcome.value, (event as? RefillEvent.Computed)?.value)
                                     }
                                     is NodeOutcome.Failure -> {
-                                        assertEquals(op.outcome.failure, (event as? TrickleEvent.Failure)?.failure)
+                                        assertEquals(op.outcome.failure, (event as? RefillEvent.Failure)?.failure)
                                     }
                                 }
                             }
@@ -680,9 +680,9 @@ class TrickleFuzzTests {
         }
     }
 
-    private fun checkAsyncInstanceWithListeners2(instance: TrickleAsyncInstance, operations: List<FuzzOperation>) {
+    private fun checkAsyncInstanceWithListeners2(instance: RefillAsyncInstance, operations: List<FuzzOperation>) {
         val collectedErrors = Collections.synchronizedList(ArrayList<Exception>())
-        val listenedEvents = ConcurrentHashMap<ValueId, TrickleEvent<*>>()
+        val listenedEvents = ConcurrentHashMap<ValueId, RefillEvent<*>>()
         Awaitility.setDefaultPollDelay(0, TimeUnit.MILLISECONDS)
         Awaitility.setDefaultPollInterval(10, TimeUnit.MILLISECONDS)
 
@@ -702,7 +702,7 @@ class TrickleFuzzTests {
         for (valueId in listenedValueIds) {
             val unused = when (valueId) {
                 is ValueId.Nonkeyed -> {
-                    instance.addBasicListener(valueId.nodeName, TrickleEventListener { event ->
+                    instance.addBasicListener(valueId.nodeName, RefillEventListener { event ->
                         listenedEvents.merge(event.valueId, event, { event1, event2 ->
                             if (event2.timestamp > event1.timestamp) {
                                 event2
@@ -717,7 +717,7 @@ class TrickleFuzzTests {
                     })
                 }
                 is ValueId.FullKeyList -> {
-                    instance.addKeyListListener(valueId.nodeName, TrickleEventListener { event ->
+                    instance.addKeyListListener(valueId.nodeName, RefillEventListener { event ->
                         listenedEvents.merge(event.valueId, event, { event1, event2 ->
                             if (event2.timestamp > event1.timestamp) {
                                 event2
@@ -733,7 +733,7 @@ class TrickleFuzzTests {
                 }
                 is ValueId.KeyListKey -> TODO()
                 is ValueId.Keyed -> {
-                    instance.addPerKeyListener(valueId.nodeName, TrickleEventListener { event ->
+                    instance.addPerKeyListener(valueId.nodeName, RefillEventListener { event ->
                         listenedEvents.merge(event.valueId, event, { event1, event2 ->
                             if (event2.timestamp > event1.timestamp) {
                                 event2
@@ -748,7 +748,7 @@ class TrickleFuzzTests {
                     })
                 }
                 is ValueId.FullKeyedList -> {
-                    instance.addKeyedListListener(valueId.nodeName, TrickleEventListener { event ->
+                    instance.addKeyedListListener(valueId.nodeName, RefillEventListener { event ->
                         listenedEvents.merge(event.valueId, event, { event1, event2 ->
                             if (event2.timestamp > event1.timestamp) {
                                 event2
@@ -783,10 +783,10 @@ class TrickleFuzzTests {
                                     is NodeOutcome.NotYetComputed -> { /* Do nothing */ }
                                     is NodeOutcome.NoSuchKey -> TODO()
                                     is NodeOutcome.Computed -> {
-                                        assertEquals(op.outcome.value, (event as? TrickleEvent.Computed)?.value)
+                                        assertEquals(op.outcome.value, (event as? RefillEvent.Computed)?.value)
                                     }
                                     is NodeOutcome.Failure -> {
-                                        assertEquals(op.outcome.failure, (event as? TrickleEvent.Failure)?.failure)
+                                        assertEquals(op.outcome.failure, (event as? RefillEvent.Failure)?.failure)
                                     }
                                 }
                             }
@@ -798,10 +798,10 @@ class TrickleFuzzTests {
                                     is NodeOutcome.NotYetComputed -> { /* Do nothing */ }
                                     is NodeOutcome.NoSuchKey -> TODO()
                                     is NodeOutcome.Computed -> {
-                                        assertEquals(op.outcome.value, (event as? TrickleEvent.Computed)?.value)
+                                        assertEquals(op.outcome.value, (event as? RefillEvent.Computed)?.value)
                                     }
                                     is NodeOutcome.Failure -> {
-                                        assertEquals(op.outcome.failure, (event as? TrickleEvent.Failure)?.failure)
+                                        assertEquals(op.outcome.failure, (event as? RefillEvent.Failure)?.failure)
                                     }
                                 }
                             }
@@ -813,10 +813,10 @@ class TrickleFuzzTests {
                                     is NodeOutcome.NotYetComputed -> { /* Do nothing */ }
                                     is NodeOutcome.NoSuchKey -> TODO()
                                     is NodeOutcome.Computed -> {
-                                        assertEquals(op.outcome.value, (event as? TrickleEvent.Computed)?.value)
+                                        assertEquals(op.outcome.value, (event as? RefillEvent.Computed)?.value)
                                     }
                                     is NodeOutcome.Failure -> {
-                                        assertEquals(op.outcome.failure, (event as? TrickleEvent.Failure)?.failure)
+                                        assertEquals(op.outcome.failure, (event as? RefillEvent.Failure)?.failure)
                                     }
                                 }
                             }
@@ -827,13 +827,13 @@ class TrickleFuzzTests {
                                 when (op.outcome) {
                                     is NodeOutcome.NotYetComputed -> { /* Do nothing */ }
                                     is NodeOutcome.NoSuchKey -> {
-                                        assertTrue(event == null || event is TrickleEvent.KeyRemoved)
+                                        assertTrue(event == null || event is RefillEvent.KeyRemoved)
                                     }
                                     is NodeOutcome.Computed -> {
-                                        assertEquals(op.outcome.value, (event as? TrickleEvent.Computed)?.value)
+                                        assertEquals(op.outcome.value, (event as? RefillEvent.Computed)?.value)
                                     }
                                     is NodeOutcome.Failure -> {
-                                        assertEquals(op.outcome.failure, (event as? TrickleEvent.Failure)?.failure)
+                                        assertEquals(op.outcome.failure, (event as? RefillEvent.Failure)?.failure)
                                     }
                                 }
                             }
@@ -863,7 +863,7 @@ sealed class FuzzOperation {
     data class EditKeys(val name: KeyListNodeName<Int>, val keysAdded: List<Int>, val keysRemoved: List<Int>) : FuzzOperation()
     data class SetKeyList(val name: KeyListNodeName<Int>, val value: List<Int>) : FuzzOperation()
     data class SetKeyed(val name: KeyedNodeName<Int, Int>, val map: Map<Int, Int>) : FuzzOperation()
-    data class SetMultiple(val changes: List<TrickleInputChange>): FuzzOperation()
+    data class SetMultiple(val changes: List<RefillInputChange>): FuzzOperation()
     data class CheckBasic(val name: NodeName<Int>, val outcome: NodeOutcome<Int>) : FuzzOperation()
     data class CheckKeyList(val name: KeyListNodeName<Int>, val outcome: NodeOutcome<List<Int>>) : FuzzOperation()
     data class CheckKeyedList(val name: KeyedNodeName<Int, Int>, val outcome: NodeOutcome<List<Int>>) : FuzzOperation()
@@ -873,7 +873,7 @@ sealed class FuzzOperation {
 class FuzzOperationScript(val operations: List<FuzzOperation>, val states: List<Map<ValueId, Any>>) {
 }
 
-private fun getOperationsScript(definition: TrickleDefinition, operationsSeed: Int): FuzzOperationScript {
+private fun getOperationsScript(definition: RefillDefinition, operationsSeed: Int): FuzzOperationScript {
     val rawInstance = definition.instantiateRaw()
     // Handle cases where a node we query depends only on key list inputs
     rawInstance.completeSynchronously()
@@ -888,12 +888,12 @@ private fun getOperationsScript(definition: TrickleDefinition, operationsSeed: I
     return FuzzOperationScript(operations, states)
 }
 
-fun getState(instance: TrickleInstance): Map<ValueId, Any> {
+fun getState(instance: RefillInstance): Map<ValueId, Any> {
     // TODO: Implement (these full states will be used in evaluating
     return mapOf()
 }
 
-private fun getRandomOperation(rawInstance: TrickleInstance, definition: TrickleDefinition, random: Random): FuzzOperation {
+private fun getRandomOperation(rawInstance: RefillInstance, definition: RefillDefinition, random: Random): FuzzOperation {
     val roll = random.nextDouble()
     if (roll < 0.15) {
         val numberOfInputs = random.nextInt(6)
@@ -941,21 +941,21 @@ private fun getRandomOperation(rawInstance: TrickleInstance, definition: Trickle
     }
 }
 
-// Note: These aren't the same type because TrickleInputChange has generics, but those make it difficult to call the
+// Note: These aren't the same type because RefillInputChange has generics, but those make it difficult to call the
 // implementations when we run the operations
-fun toOperation(change: TrickleInputChange): FuzzOperation {
+fun toOperation(change: RefillInputChange): FuzzOperation {
     return when (change) {
-        is TrickleInputChange.SetBasic<*> -> FuzzOperation.SetBasic(change.nodeName as NodeName<Int>, change.value as Int)
-        is TrickleInputChange.SetKeys<*> -> FuzzOperation.SetKeyList(change.nodeName as KeyListNodeName<Int>, change.value as List<Int>)
-        is TrickleInputChange.EditKeys<*> -> FuzzOperation.EditKeys(change.nodeName as KeyListNodeName<Int>,
+        is RefillInputChange.SetBasic<*> -> FuzzOperation.SetBasic(change.nodeName as NodeName<Int>, change.value as Int)
+        is RefillInputChange.SetKeys<*> -> FuzzOperation.SetKeyList(change.nodeName as KeyListNodeName<Int>, change.value as List<Int>)
+        is RefillInputChange.EditKeys<*> -> FuzzOperation.EditKeys(change.nodeName as KeyListNodeName<Int>,
             change.keysAdded as List<Int>,
             change.keysRemoved as List<Int>
         )
-        is TrickleInputChange.SetKeyed<*, *> -> FuzzOperation.SetKeyed(change.nodeName as KeyedNodeName<Int, Int>, change.map as Map<Int, Int>)
+        is RefillInputChange.SetKeyed<*, *> -> FuzzOperation.SetKeyed(change.nodeName as KeyedNodeName<Int, Int>, change.map as Map<Int, Int>)
     }
 }
 
-private fun getRandomInputChange(definition: TrickleDefinition, random: Random, rawInstance: TrickleInstance): TrickleInputChange {
+private fun getRandomInputChange(definition: RefillDefinition, random: Random, rawInstance: RefillInstance): RefillInputChange {
     val allInputNames = getAllInputNodes(definition)
     val inputName = allInputNames.getAtRandom(random, { error("This shouldn't be empty") })
     // TODO: Add multi-setting when that's a thing
@@ -964,7 +964,7 @@ private fun getRandomInputChange(definition: TrickleDefinition, random: Random, 
             val nodeName = inputName as NodeName<Int>
             val valueToSet = random.nextInt(100)
             rawInstance.setInput(nodeName, valueToSet)
-            return TrickleInputChange.SetBasic(nodeName, valueToSet)
+            return RefillInputChange.SetBasic(nodeName, valueToSet)
         }
         is KeyListNodeName<*> -> {
             val nodeName = inputName as KeyListNodeName<Int>
@@ -972,7 +972,7 @@ private fun getRandomInputChange(definition: TrickleDefinition, random: Random, 
             if (keyListRoll < 0.2) {
                 val valueToAdd = random.nextInt(100)
                 rawInstance.addKeyInput(nodeName, valueToAdd)
-                return TrickleInputChange.EditKeys(nodeName, listOf(valueToAdd), listOf())
+                return RefillInputChange.EditKeys(nodeName, listOf(valueToAdd), listOf())
             } else if (keyListRoll < 0.35) {
                 // Pick an existing key to delete
                 val existingListOutcome = rawInstance.getNodeOutcome(nodeName)
@@ -983,12 +983,12 @@ private fun getRandomInputChange(definition: TrickleDefinition, random: Random, 
                     is NodeOutcome.NoSuchKey -> 3
                 }
                 rawInstance.removeKeyInput(nodeName, valueToRemove)
-                return TrickleInputChange.EditKeys(nodeName, listOf(), listOf(valueToRemove))
+                return RefillInputChange.EditKeys(nodeName, listOf(), listOf(valueToRemove))
             } else if (keyListRoll < 0.4) {
                 // Pick a random key to maybe delete if it's there
                 val valueToRemove = random.nextInt(100)
                 rawInstance.removeKeyInput(nodeName, valueToRemove)
-                return TrickleInputChange.EditKeys(nodeName, listOf(), listOf(valueToRemove))
+                return RefillInputChange.EditKeys(nodeName, listOf(), listOf(valueToRemove))
             } else if (keyListRoll < 0.7) {
                 // Add some keys, remove some keys
                 val existingListOutcome = rawInstance.getNodeOutcome(nodeName)
@@ -1002,11 +1002,11 @@ private fun getRandomInputChange(definition: TrickleDefinition, random: Random, 
                     is NodeOutcome.NoSuchKey -> listOf(3)
                 }
                 rawInstance.editKeys(nodeName, valuesToAdd, valuesToRemove)
-                return TrickleInputChange.EditKeys(nodeName, valuesToAdd, valuesToRemove)
+                return RefillInputChange.EditKeys(nodeName, valuesToAdd, valuesToRemove)
             } else {
                 val newList = createRandomListProducingFunction(random)(listOf(random.nextInt(100)))
                 rawInstance.setInput(nodeName, newList)
-                return TrickleInputChange.SetKeys(nodeName, newList)
+                return RefillInputChange.SetKeys(nodeName, newList)
             }
         }
         is KeyedNodeName<*, *> -> {
@@ -1032,13 +1032,13 @@ private fun getRandomInputChange(definition: TrickleDefinition, random: Random, 
 
             val valueToSet = random.nextInt(100)
             rawInstance.setKeyedInput(nodeName, key, valueToSet)
-            return TrickleInputChange.SetKeyed(nodeName, mapOf(key to valueToSet))
+            return RefillInputChange.SetKeyed(nodeName, mapOf(key to valueToSet))
         }
         else -> error("Unexpected situation")
     }
 }
 
-private fun getAllInputNodes(definition: TrickleDefinition): List<GenericNodeName> {
+private fun getAllInputNodes(definition: RefillDefinition): List<GenericNodeName> {
     val result = ArrayList<GenericNodeName>()
     // Use topologicalOrdering so nodes end up in the same order in each run
     for (nodeName in definition.topologicalOrdering) {
@@ -1054,7 +1054,7 @@ private fun getAllInputNodes(definition: TrickleDefinition): List<GenericNodeNam
     return result
 }
 
-private fun getFuzzedDefinition(seed: Int): TrickleDefinition {
+private fun getFuzzedDefinition(seed: Int): RefillDefinition {
     return FuzzedDefinitionBuilder(seed).run()
 }
 
@@ -1062,14 +1062,14 @@ private class FuzzedDefinitionBuilder(seed: Int) {
     val random = Random(seed.toLong())
     val numNodes = 5 + random.nextInt(6)
 
-    val builder = TrickleDefinitionBuilder()
+    val builder = RefillDefinitionBuilder()
     val existingNodes = ArrayList<GenericNodeName>()
-    val existingKeyListNodes = ArrayList<TrickleBuiltKeyListNode<Int>>()
-    val existingKeyedNodes = HashMap<KeyListNodeName<*>, ArrayList<TrickleInput<*>>>()
+    val existingKeyListNodes = ArrayList<RefillBuiltKeyListNode<Int>>()
+    val existingKeyedNodes = HashMap<KeyListNodeName<*>, ArrayList<RefillInput<*>>>()
 
-    val unkeyedInputs = ArrayList<TrickleInput<*>>()
+    val unkeyedInputs = ArrayList<RefillInput<*>>()
 
-    fun run(): TrickleDefinition {
+    fun run(): RefillDefinition {
         for (i in 1..numNodes) {
             val curNodeRoll = random.nextDouble()
             if (existingNodes.size < 2) {
@@ -1150,7 +1150,7 @@ private class FuzzedDefinitionBuilder(seed: Int) {
             return
         }
 
-        val possibleInputs = ArrayList<TrickleInput<*>>()
+        val possibleInputs = ArrayList<RefillInput<*>>()
         possibleInputs.addAll(unkeyedInputs)
         possibleInputs.addAll(existingKeyedNodes[keySource.name]!!)
         // Decide how many inputs to have (between zero and four)

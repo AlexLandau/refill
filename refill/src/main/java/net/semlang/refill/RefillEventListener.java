@@ -4,7 +4,7 @@ package net.semlang.refill;
  * (TODO: document)
  *
  * Note: For implementation reasons, the timestamp may be -1 for the initial value when the listener is added,
- * regardless of its actual timestamp at the time. Future versions of Trickle may change the implementation such
+ * regardless of its actual timestamp at the time. Future versions of Refill may change the implementation such
  * that timestamps are not meaningful for comparing across different nodes.
  */
 /*
@@ -12,6 +12,6 @@ package net.semlang.refill;
  * this.
  */
 @FunctionalInterface
-public interface TrickleEventListener<T> {
-    void receive(TrickleEvent<T> event);
+public interface RefillEventListener<T> {
+    void receive(RefillEvent<T> event);
 }

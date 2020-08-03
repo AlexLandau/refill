@@ -6,7 +6,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /**
- * This test class covers how Trickle handles misuse of its API by the coder using it, as opposed to how it handles tasks
+ * This test class covers how Refill handles misuse of its API by the coder using it, as opposed to how it handles tasks
  * failing (which is part of its expected behavior).
  */
 class ErrorHandlingTests {
@@ -21,8 +21,8 @@ class ErrorHandlingTests {
 
     @Test
     fun testCannotShareNodesBetweenBuilders() {
-        val builder1 = TrickleDefinitionBuilder()
-        val builder2 = TrickleDefinitionBuilder()
+        val builder1 = RefillDefinitionBuilder()
+        val builder2 = RefillDefinitionBuilder()
 
         val aNode1 = builder1.createInputNode(A)
         assertThrows(IllegalArgumentException::class.java) {
@@ -32,7 +32,7 @@ class ErrorHandlingTests {
 
     @Test
     fun testCannotShareResultsBetweenInstances() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createNode(B, aNode, { it + 1 })
@@ -52,7 +52,7 @@ class ErrorHandlingTests {
 
     @Test
     fun testCannotSetUnrecognizedNode() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createNode(B, aNode, { it + 1 })
@@ -66,7 +66,7 @@ class ErrorHandlingTests {
 
     @Test
     fun testCannotSetUnrecognizedKeyListNode() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createNode(B, aNode, { it + 1 })
@@ -80,7 +80,7 @@ class ErrorHandlingTests {
 
     @Test
     fun testCannotAddToUnrecognizedKeyListNode() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createNode(B, aNode, { it + 1 })
@@ -94,7 +94,7 @@ class ErrorHandlingTests {
 
     @Test
     fun testCannotRemoveFromUnrecognizedKeyListNode() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createNode(B, aNode, { it + 1 })
@@ -108,7 +108,7 @@ class ErrorHandlingTests {
 
     @Test
     fun testCannotSetNonInputNode() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createNode(B, aNode, { it + 1 })
@@ -122,7 +122,7 @@ class ErrorHandlingTests {
 
     @Test
     fun testCannotSetNonInputKeyListNode() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createKeyListNode(B_KEYS, aNode, { (1..it).toList() })
@@ -136,7 +136,7 @@ class ErrorHandlingTests {
 
     @Test
     fun testCannotAddToNonInputKeyListNode() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createKeyListNode(B_KEYS, aNode, { (1..it).toList() })
@@ -150,7 +150,7 @@ class ErrorHandlingTests {
 
     @Test
     fun testCannotRemoveFromNonInputKeyListNode() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createKeyListNode(B_KEYS, aNode, { (1..it).toList() })
@@ -164,7 +164,7 @@ class ErrorHandlingTests {
 
     @Test
     fun testPassingUnusedNamesToAsyncInstance() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val a = builder.createInputNode(A)
 

@@ -5,10 +5,9 @@ import java.lang.IllegalStateException
 import java.util.*
 
 /*
- * Trickle: A Kotlin/JVM library (...if I choose to extract it) for defining asynchronous tasks in terms of each
+ * Refill: A Kotlin/JVM library for defining asynchronous tasks in terms of each
  * other, going beyond RxJava by adding support for minimal recomputation when portions of the input change.
  *
- * There's already a Java library named Trickle, so the name is going to change.
  */
 
 // TODO: For onCatch methods, should outputs of parent nodes be added to their inputs?
@@ -170,8 +169,8 @@ internal class KeyList<T> private constructor(val list: List<T>, val set: Set<T>
 
 }
 
-private data class TimestampedValue(private var timestamp: Long, private var latestConsistentTimestamp: Long, private var value: Any?, private var failure: TrickleFailure?) {
-    fun set(newTimestamp: Long, newValue: Any?, newFailure: TrickleFailure?) {
+private data class TimestampedValue(private var timestamp: Long, private var latestConsistentTimestamp: Long, private var value: Any?, private var failure: RefillFailure?) {
+    fun set(newTimestamp: Long, newValue: Any?, newFailure: RefillFailure?) {
         this.timestamp = newTimestamp
         this.latestConsistentTimestamp = newTimestamp
         this.value = newValue
@@ -185,7 +184,7 @@ private data class TimestampedValue(private var timestamp: Long, private var lat
         this.failure = null
     }
 
-    fun setFailure(newTimestamp: Long, newFailure: TrickleFailure) {
+    fun setFailure(newTimestamp: Long, newFailure: RefillFailure) {
         this.timestamp = newTimestamp
         this.latestConsistentTimestamp = newTimestamp
         this.value = null
@@ -208,13 +207,13 @@ private data class TimestampedValue(private var timestamp: Long, private var lat
         return latestConsistentTimestamp
     }
 
-    fun getFailure(): TrickleFailure? {
+    fun getFailure(): RefillFailure? {
         return failure
     }
 }
 
-interface TrickleInputReceiver {
-    fun setInputs(changes: List<TrickleInputChange>): Long
+interface RefillInputReceiver {
+    fun setInputs(changes: List<RefillInputChange>): Long
     fun <T> setInput(nodeName: NodeName<T>, value: T): Long
     fun <T> setInput(nodeName: KeyListNodeName<T>, list: List<T>): Long
     fun <T> addKeyInput(nodeName: KeyListNodeName<T>, key: T): Long
@@ -224,28 +223,28 @@ interface TrickleInputReceiver {
     fun <K, T> setKeyedInputs(nodeName: KeyedNodeName<K, T>, map: Map<K, T>): Long
 }
 
-sealed class TrickleInputChange {
+sealed class RefillInputChange {
     abstract val nodeName: GenericNodeName
-    data class SetBasic<T>(override val nodeName: NodeName<T>, val value: T): TrickleInputChange()
-    data class SetKeys<T>(override val nodeName: KeyListNodeName<T>, val value: List<T>): TrickleInputChange()
+    data class SetBasic<T>(override val nodeName: NodeName<T>, val value: T): RefillInputChange()
+    data class SetKeys<T>(override val nodeName: KeyListNodeName<T>, val value: List<T>): RefillInputChange()
     // TODO: Add to fuzz testing
     // Note: Removals happen before additions. If a key is in both lists, it will be removed and then readded to the list (thus ending up in a different position).
-    data class EditKeys<T>(override val nodeName: KeyListNodeName<T>, val keysAdded: List<T>, val keysRemoved: List<T>): TrickleInputChange()
-    data class SetKeyed<K, T>(override val nodeName: KeyedNodeName<K, T>, val map: Map<K, T>): TrickleInputChange()
+    data class EditKeys<T>(override val nodeName: KeyListNodeName<T>, val keysAdded: List<T>, val keysRemoved: List<T>): RefillInputChange()
+    data class SetKeyed<K, T>(override val nodeName: KeyedNodeName<K, T>, val map: Map<K, T>): RefillInputChange()
 }
 
-interface TrickleRawInstance {
-    val definition: TrickleDefinition
-    fun setInputs(changes: List<TrickleInputChange>): Long
+interface RefillRawInstance {
+    val definition: RefillDefinition
+    fun setInputs(changes: List<RefillInputChange>): Long
     fun <T> setInput(nodeName: NodeName<T>, value: T): Long
     fun <T> setInput(nodeName: KeyListNodeName<T>, list: List<T>): Long
     fun <T> addKeyInput(nodeName: KeyListNodeName<T>, key: T): Long
     fun <T> removeKeyInput(nodeName: KeyListNodeName<T>, key: T): Long
     fun <K, T> setKeyedInput(nodeName: KeyedNodeName<K, T>, key: K, value: T): Long
     fun <K, T> setKeyedInputs(nodeName: KeyedNodeName<K, T>, map: Map<K, T>): Long
-    fun getNextSteps(): List<TrickleStep>
+    fun getNextSteps(): List<RefillStep>
     fun completeSynchronously()
-    fun reportResult(result: TrickleStepResult)
+    fun reportResult(result: RefillStepResult)
     fun <T> getNodeValue(nodeName: NodeName<T>): T
     fun <T> getNodeValue(nodeName: KeyListNodeName<T>): List<T>
     fun <K, V> getNodeValue(nodeName: KeyedNodeName<K, V>, key: K): V
@@ -261,13 +260,13 @@ interface TrickleRawInstance {
 
 // TODO: Synchronize stuff
 // TODO: Add methods to ask for a given result, but only after a given timestamp (block until available?)
-class TrickleInstance internal constructor(override val definition: TrickleDefinition): TrickleRawInstance {
+class RefillInstance internal constructor(override val definition: RefillDefinition): RefillRawInstance {
     // Used to ensure all results we receive originated from this instance
     class Id internal constructor()
     private val instanceId = Id()
 
     private val values = LinkedHashMap<ValueId, TimestampedValue>()
-    private var valueListener: ((TrickleEvent<*>) -> Unit)? = null
+    private var valueListener: ((RefillEvent<*>) -> Unit)? = null
 
     private var curTimestamp = 0L
 
@@ -276,7 +275,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
             for (unkeyedNode in definition.nonkeyedNodes.values) {
                 if (unkeyedNode.operation == null) {
                     val valueId = ValueId.Nonkeyed(unkeyedNode.name)
-                    setValue(valueId, 0L, null, TrickleFailure(mapOf(), setOf(valueId)))
+                    setValue(valueId, 0L, null, RefillFailure(mapOf(), setOf(valueId)))
                 }
             }
             // Key list input nodes start out as empty lists
@@ -289,7 +288,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
     }
 
     @Synchronized
-    private fun setValueSuppressingListener(valueId: ValueId, newTimestamp: Long, newValue: Any?, newFailure: TrickleFailure?) {
+    private fun setValueSuppressingListener(valueId: ValueId, newTimestamp: Long, newValue: Any?, newFailure: RefillFailure?) {
         var valueHolder = values[valueId]
         if (valueHolder == null) {
             valueHolder = TimestampedValue(-1L, -1L, null, null)
@@ -299,30 +298,30 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
     }
 
     @Synchronized
-    private fun setValue(valueId: ValueId, newTimestamp: Long, newValue: Any?, newFailure: TrickleFailure?) {
+    private fun setValue(valueId: ValueId, newTimestamp: Long, newValue: Any?, newFailure: RefillFailure?) {
         setValueSuppressingListener(valueId, newTimestamp, newValue, newFailure)
         if (valueListener != null) {
-            val event: TrickleEvent<*> = if (newFailure == null) {
+            val event: RefillEvent<*> = if (newFailure == null) {
                 if (valueId is ValueId.FullKeyList) {
-                    TrickleEvent.Computed.of(valueId, (newValue as KeyList<Any?>).asList(), newTimestamp)
+                    RefillEvent.Computed.of(valueId, (newValue as KeyList<Any?>).asList(), newTimestamp)
                 } else {
-                    TrickleEvent.Computed.of(valueId, newValue, newTimestamp)
+                    RefillEvent.Computed.of(valueId, newValue, newTimestamp)
                 }
             } else {
-                TrickleEvent.Failure.of<Any?>(valueId, newFailure, newTimestamp)
+                RefillEvent.Failure.of<Any?>(valueId, newFailure, newTimestamp)
             }
             valueListener!!(event)
         }
     }
 
     @Synchronized
-    fun setValueListener(listener: ((TrickleEvent<*>) -> Unit)?) {
+    fun setValueListener(listener: ((RefillEvent<*>) -> Unit)?) {
         this.valueListener = listener
     }
 
     // TODO: Only invoke the listener for the final values of inputs after a set of changes
     @Synchronized
-    override fun setInputs(changes: List<TrickleInputChange>): Long {
+    override fun setInputs(changes: List<RefillInputChange>): Long {
         for (change in changes) {
             checkHasValidInputNode(change)
         }
@@ -337,7 +336,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
 
         val prospectiveNewTimestamp = curTimestamp + 1
 //        var somethingChanged = false
-        val eventsFromChanges = HashMap<ValueId, TrickleEvent<*>>()
+        val eventsFromChanges = HashMap<ValueId, RefillEvent<*>>()
         for (change in changes) {
             eventsFromChanges.putAll(applyChange(change, prospectiveNewTimestamp))
         }
@@ -357,19 +356,19 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
      * in the list.)
      */
     @Synchronized
-    private fun applyChange(change: TrickleInputChange, newTimestamp: Long): Map<ValueId, TrickleEvent<*>> {
+    private fun applyChange(change: RefillInputChange, newTimestamp: Long): Map<ValueId, RefillEvent<*>> {
         return when (change) {
-            is TrickleInputChange.SetBasic<*> -> applySetBasicChange(change, newTimestamp)
-            is TrickleInputChange.SetKeys<*> -> applySetKeysChange(change, newTimestamp)
-            is TrickleInputChange.EditKeys<*> -> applyEditKeysChange(change, newTimestamp)
-            is TrickleInputChange.SetKeyed<*, *> -> applySetKeyedChange(change, newTimestamp)
+            is RefillInputChange.SetBasic<*> -> applySetBasicChange(change, newTimestamp)
+            is RefillInputChange.SetKeys<*> -> applySetKeysChange(change, newTimestamp)
+            is RefillInputChange.EditKeys<*> -> applyEditKeysChange(change, newTimestamp)
+            is RefillInputChange.SetKeyed<*, *> -> applySetKeyedChange(change, newTimestamp)
         }
     }
 
     @Synchronized
-    private fun checkHasValidInputNode(change: TrickleInputChange) {
+    private fun checkHasValidInputNode(change: RefillInputChange) {
         val unused = when (change) {
-            is TrickleInputChange.SetBasic<*> -> {
+            is RefillInputChange.SetBasic<*> -> {
                 val node = definition.nonkeyedNodes[change.nodeName]
                 if (node == null) {
                     throw IllegalArgumentException("Unrecognized node name ${change.nodeName}")
@@ -379,7 +378,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                 }
                 null
             }
-            is TrickleInputChange.SetKeys<*> -> {
+            is RefillInputChange.SetKeys<*> -> {
                 val node = definition.keyListNodes[change.nodeName]
                 if (node == null) {
                     throw IllegalArgumentException("Unrecognized node name ${change.nodeName}")
@@ -389,7 +388,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                 }
                 null
             }
-            is TrickleInputChange.EditKeys<*> -> {
+            is RefillInputChange.EditKeys<*> -> {
                 val node = definition.keyListNodes[change.nodeName]
                 if (node == null) {
                     throw IllegalArgumentException("Unrecognized node name ${change.nodeName}")
@@ -399,7 +398,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                 }
                 null
             }
-            is TrickleInputChange.SetKeyed<*, *> -> {
+            is RefillInputChange.SetKeyed<*, *> -> {
                 val node = definition.keyedNodes[change.nodeName]
                 // TODO: Write tests for these error cases
                 if (node == null) {
@@ -426,24 +425,24 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
 //        curTimestamp++
 //        setValue(ValueId.Nonkeyed(nodeName), curTimestamp, value, null)
 //        return curTimestamp
-        return setInputs(listOf(TrickleInputChange.SetBasic(nodeName, value)))
+        return setInputs(listOf(RefillInputChange.SetBasic(nodeName, value)))
     }
 
     // TODO: Currently we don't check equality here but we may want to in the future
     @Synchronized
-    private fun <T> applySetBasicChange(change: TrickleInputChange.SetBasic<T>, newTimestamp: Long): Map<ValueId, TrickleEvent<*>> {
+    private fun <T> applySetBasicChange(change: RefillInputChange.SetBasic<T>, newTimestamp: Long): Map<ValueId, RefillEvent<*>> {
         val valueId = ValueId.Nonkeyed(change.nodeName)
         setValueSuppressingListener(valueId, newTimestamp, change.value, null)
-        return mapOf(valueId to TrickleEvent.Computed.of(valueId, change.value, newTimestamp))
+        return mapOf(valueId to RefillEvent.Computed.of(valueId, change.value, newTimestamp))
     }
 
     @Synchronized
     override fun <T> setInput(nodeName: KeyListNodeName<T>, list: List<T>): Long {
-        return setInputs(listOf(TrickleInputChange.SetKeys(nodeName, list)))
+        return setInputs(listOf(RefillInputChange.SetKeys(nodeName, list)))
     }
 
     @Synchronized
-    private fun <T> applySetKeysChange(change: TrickleInputChange.SetKeys<T>, newTimestamp: Long): Map<ValueId, TrickleEvent<*>> {
+    private fun <T> applySetKeysChange(change: RefillInputChange.SetKeys<T>, newTimestamp: Long): Map<ValueId, RefillEvent<*>> {
         val (nodeName, value) = change
         val listValueId = ValueId.FullKeyList(nodeName)
         val oldList = values[listValueId]!!.getValue() as KeyList<T>
@@ -467,18 +466,18 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
             }
             val pruneEvents = pruneKeyedInputsForRemovedKeysSuppressingListener(nodeName, removals, newTimestamp)
 
-            return mapOf(listValueId to TrickleEvent.Computed.of(listValueId, newList.asList(), newTimestamp)) + pruneEvents
+            return mapOf(listValueId to RefillEvent.Computed.of(listValueId, newList.asList(), newTimestamp)) + pruneEvents
         }
         return mapOf()
     }
 
     @Synchronized
     override fun <T> addKeyInput(nodeName: KeyListNodeName<T>, key: T): Long {
-        return setInputs(listOf(TrickleInputChange.EditKeys(nodeName, listOf(key), listOf())))
+        return setInputs(listOf(RefillInputChange.EditKeys(nodeName, listOf(key), listOf())))
     }
 
     @Synchronized
-    private fun <T> applyEditKeysChange(change: TrickleInputChange.EditKeys<T>, newTimestamp: Long): Map<ValueId, TrickleEvent<*>> {
+    private fun <T> applyEditKeysChange(change: RefillInputChange.EditKeys<T>, newTimestamp: Long): Map<ValueId, RefillEvent<*>> {
         val (nodeName, keysToAdd, keysToRemove) = change
         val listValueId = ValueId.FullKeyList(nodeName)
         val oldList = values[listValueId]!!.getValue() as KeyList<T>
@@ -503,25 +502,25 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                 }
             }
             val pruneEvents = pruneKeyedInputsForRemovedKeysSuppressingListener(nodeName, actuallyRemoved, newTimestamp)
-            return mapOf(listValueId to TrickleEvent.Computed.of(listValueId, newList.asList(), newTimestamp)) + pruneEvents
+            return mapOf(listValueId to RefillEvent.Computed.of(listValueId, newList.asList(), newTimestamp)) + pruneEvents
         }
         return mapOf()
     }
 
     @Synchronized
     override fun <T> removeKeyInput(nodeName: KeyListNodeName<T>, key: T): Long {
-        return setInputs(listOf(TrickleInputChange.EditKeys(nodeName, listOf(), listOf(key))))
+        return setInputs(listOf(RefillInputChange.EditKeys(nodeName, listOf(), listOf(key))))
     }
 
     @Synchronized
     fun <T> editKeys(nodeName: KeyListNodeName<T>, keysToAdd: List<T>, keysToRemove: List<T>): Long {
-        return setInputs(listOf(TrickleInputChange.EditKeys(nodeName, keysToAdd, keysToRemove)))
+        return setInputs(listOf(RefillInputChange.EditKeys(nodeName, keysToAdd, keysToRemove)))
     }
 
     // TODO: Reconcile with the other/refactor
     @Synchronized
-    private fun <T> pruneKeyedInputsForRemovedKeysSuppressingListener(nodeName: KeyListNodeName<T>, keysRemoved: Set<T>, timestamp: Long): Map<ValueId, TrickleEvent<*>> {
-        val events = HashMap<ValueId, TrickleEvent<*>>()
+    private fun <T> pruneKeyedInputsForRemovedKeysSuppressingListener(nodeName: KeyListNodeName<T>, keysRemoved: Set<T>, timestamp: Long): Map<ValueId, RefillEvent<*>> {
+        val events = HashMap<ValueId, RefillEvent<*>>()
         // Prune values for keys that no longer exist in the key list
         // These will now return "NoSuchKey"
         for (valueId in values.keys.toList()) {
@@ -532,7 +531,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                 val keySourceName = definition.keyedNodes.getValue(keyedNodeName).keySourceName
                 if (keySourceName == nodeName) {
                     values.remove(valueId)
-                    events.put(valueId, TrickleEvent.KeyRemoved.of<Any?>(valueId, timestamp))
+                    events.put(valueId, RefillEvent.KeyRemoved.of<Any?>(valueId, timestamp))
                 }
             }
         }
@@ -552,7 +551,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                 if (keySourceName == nodeName) {
                     values.remove(valueId)
                     if (valueListener != null) {
-                        val event = TrickleEvent.KeyRemoved.of<Any?>(valueId, timestamp)
+                        val event = RefillEvent.KeyRemoved.of<Any?>(valueId, timestamp)
                         valueListener!!(event)
                     }
                 }
@@ -562,7 +561,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
 
     @Synchronized
     override fun <K, T> setKeyedInputs(nodeName: KeyedNodeName<K, T>, map: Map<K, T>): Long {
-        return setInputs(listOf(TrickleInputChange.SetKeyed(nodeName, map)))
+        return setInputs(listOf(RefillInputChange.SetKeyed(nodeName, map)))
     }
 
         // TODO: Add a setKeyedInputs that takes a map as an argument
@@ -593,11 +592,11 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
 //        curTimestamp++
 //        setValue(keyedValueId, curTimestamp, value, null)
 //        return curTimestamp
-        return setInputs(listOf(TrickleInputChange.SetKeyed(nodeName, mapOf(key to value))))
+        return setInputs(listOf(RefillInputChange.SetKeyed(nodeName, mapOf(key to value))))
     }
 
     @Synchronized
-    private fun <K, T> applySetKeyedChange(change: TrickleInputChange.SetKeyed<K, T>, newTimestamp: Long): Map<ValueId, TrickleEvent<*>> {
+    private fun <K, T> applySetKeyedChange(change: RefillInputChange.SetKeyed<K, T>, newTimestamp: Long): Map<ValueId, RefillEvent<*>> {
         val (nodeName, map) = change
         val node = definition.keyedNodes[nodeName]!!
 
@@ -609,7 +608,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
             error("Internal error: The key list should be an input and therefore should already have a value holder")
         }
 
-        val events = HashMap<ValueId, TrickleEvent<*>>()
+        val events = HashMap<ValueId, RefillEvent<*>>()
 //        var anythingChanged = false
         for ((key, value) in map) {
             // Only apply if the key currently exists
@@ -621,7 +620,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                 // TODO: Maybe don't register a change in some cases if the new value is the same or value-equals
                 setValueSuppressingListener(keyedValueId, newTimestamp, value, null)
 
-                events.put(keyedValueId, TrickleEvent.Computed.of(keyedValueId, value, newTimestamp))
+                events.put(keyedValueId, RefillEvent.Computed.of(keyedValueId, value, newTimestamp))
             }
         }
         return events
@@ -635,7 +634,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
     For each input, we want to know 1) if that input is up-to-date, and 2) if so, its timestamp
     If any input is not up-to-date, the node is not ready to be recomputed
     If all inputs are up-to-date, then the maximum of the inputs' timestamps is the desired timestamp of this node
-    So either this node is that timestamp (do nothing) or it is not (create a TrickleStep for that node with that timestamp)
+    So either this node is that timestamp (do nothing) or it is not (create a RefillStep for that node with that timestamp)
     Then we record that this node is up-to-date or its timestamp
 
     How does this differ for keylist nodes and keyed nodes? A keylist node can have multiple timestamps for its constituent
@@ -650,8 +649,8 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
     // or a combined notion of failure? One difference is that "catch" should only apply to errors, not missing inputs...
     // TODO: Update all nodes's "consistent" timestamps to curTimestamp if they're up-to-date
     @Synchronized
-    override fun getNextSteps(): List<TrickleStep> {
-        val nextSteps = ArrayList<TrickleStep>()
+    override fun getNextSteps(): List<RefillStep> {
+        val nextSteps = ArrayList<RefillStep>()
         val timeStampIfUpToDate = HashMap<ValueId, Long>()
         fun updateLatestConsistentTimestamp(valueId: ValueId) {
             values[valueId]!!.setLatestConsistentTimestamp(curTimestamp)
@@ -671,7 +670,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                         var anyInputNotUpToDate = false
                         var maximumInputTimestamp = -1L
                         val inputValues = ArrayList<Any?>()
-                        val inputFailures = ArrayList<TrickleFailure>()
+                        val inputFailures = ArrayList<RefillFailure>()
                         for (input in node.inputs) {
                             val inputValueId = getValueIdFromInput(input)
                             val timeStampMaybe = timeStampIfUpToDate[inputValueId]
@@ -685,7 +684,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                                     inputFailures.add(failure)
                                 } else {
                                     // Transform KeyLists into Lists
-                                    if (input is TrickleInput.KeyList<*>) {
+                                    if (input is RefillInput.KeyList<*>) {
                                         inputValues.add((contents.getValue() as KeyList<*>).asList())
                                     } else {
                                         inputValues.add(contents.getValue())
@@ -704,7 +703,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                                     val onCatch = node.onCatch
                                     if (onCatch != null) {
                                         nextSteps.add(
-                                            TrickleStep(nodeValueId, maximumInputTimestamp, instanceId, { onCatch(newFailure) }, null)
+                                            RefillStep(nodeValueId, maximumInputTimestamp, instanceId, { onCatch(newFailure) }, null)
                                         )
                                     } else {
                                         setValue(nodeValueId, maximumInputTimestamp, null, newFailure)
@@ -724,7 +723,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
 
                                     val operation = node.operation ?: error("This was supposed to be an input node, I guess")
                                     nextSteps.add(
-                                        TrickleStep(
+                                        RefillStep(
                                             nodeValueId,
                                             maximumInputTimestamp,
                                             instanceId,
@@ -764,7 +763,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                         var anyInputNotUpToDate = false
                         var maximumInputTimestamp = -1L
                         val inputValues = ArrayList<Any?>()
-                        val inputFailures = ArrayList<TrickleFailure>()
+                        val inputFailures = ArrayList<RefillFailure>()
                         for (input in node.inputs) {
                             val unkeyedInputValueId = getValueIdFromInput(input)
                             val timeStampMaybe = timeStampIfUpToDate[unkeyedInputValueId]
@@ -778,7 +777,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                                     inputFailures.add(failure)
                                 } else {
                                     // Transform KeyLists into Lists
-                                    if (input is TrickleInput.KeyList<*>) {
+                                    if (input is RefillInput.KeyList<*>) {
                                         inputValues.add((contents.getValue() as KeyList<*>).asList())
                                     } else {
                                         inputValues.add(contents.getValue())
@@ -797,7 +796,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                                     val onCatch = node.onCatch
                                     if (onCatch != null) {
                                         nextSteps.add(
-                                            TrickleStep(nodeValueId, maximumInputTimestamp, instanceId, { onCatch(newFailure) }, null)
+                                            RefillStep(nodeValueId, maximumInputTimestamp, instanceId, { onCatch(newFailure) }, null)
                                         )
                                     } else {
                                         setValue(nodeValueId, maximumInputTimestamp, null, newFailure)
@@ -817,7 +816,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
 
                                     val operation = node.operation ?: error("This was supposed to be an input node, I guess")
                                     nextSteps.add(
-                                        TrickleStep(
+                                        RefillStep(
                                             nodeValueId,
                                             maximumInputTimestamp,
                                             instanceId,
@@ -844,7 +843,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                     if (isKeySourceUpToDate) {
                         var anyKeyedValueNotUpToDate = false
                         var maximumInputTimestampAcrossAllKeys = timeStampIfUpToDate[fullKeyListId]!!
-                        val allInputFailuresAcrossAllKeys = ArrayList<TrickleFailure>()
+                        val allInputFailuresAcrossAllKeys = ArrayList<RefillFailure>()
 
                         val keyListHolder = values[fullKeyListId]!!
                         val keyList = if (keyListHolder.getFailure() != null) {
@@ -868,7 +867,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                                         allInputFailuresAcrossAllKeys.add(failure)
                                     }
                                 } else {
-                                    val failure = TrickleFailure(mapOf(), setOf(keyedInputValueId))
+                                    val failure = RefillFailure(mapOf(), setOf(keyedInputValueId))
 
                                     setValue(keyedInputValueId, keyListHolder.getTimestamp(), null, failure)
                                     timeStampIfUpToDate[keyedInputValueId] = keyListHolder.getTimestamp()
@@ -882,7 +881,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                                 var maximumInputTimestamp =
                                     values.getValue(ValueId.KeyListKey(keySourceName, key)).getTimestamp()
                                 val inputValues = ArrayList<Any?>()
-                                val inputFailures = ArrayList<TrickleFailure>()
+                                val inputFailures = ArrayList<RefillFailure>()
                                 for (input in node.inputs) {
                                     val unkeyedInputValueId = getValueIdFromInput(input, key)
                                     val timeStampMaybe = timeStampIfUpToDate[unkeyedInputValueId]
@@ -897,7 +896,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                                             inputFailures.add(failure)
                                         } else {
                                             // Transform KeyLists into Lists
-                                            if (input is TrickleInput.KeyList<*>) {
+                                            if (input is RefillInput.KeyList<*>) {
                                                 inputValues.add((contents.getValue() as KeyList<*>).asList())
                                             } else {
                                                 inputValues.add(contents.getValue())
@@ -919,7 +918,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                                             val onCatch = node.onCatch
                                             if (onCatch != null) {
                                                 nextSteps.add(
-                                                    TrickleStep(
+                                                    RefillStep(
                                                         keyedValueId,
                                                         maximumInputTimestamp,
                                                         instanceId,
@@ -952,7 +951,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
 
                                             val operation = node.operation as (Any?, List<*>) -> Any?
                                             nextSteps.add(
-                                                TrickleStep(
+                                                RefillStep(
                                                     keyedValueId,
                                                     maximumInputTimestamp,
                                                     instanceId,
@@ -984,7 +983,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
                                 updateLatestConsistentTimestamp(fullListValueId)
                             } else {
                                 val newList = ArrayList<Any?>()
-                                val failures = ArrayList<TrickleFailure>()
+                                val failures = ArrayList<RefillFailure>()
                                 for (key in keyList.list) {
                                     val value = values[ValueId.Keyed(nodeName, key)]!!
                                     val failure = value.getFailure()
@@ -1015,26 +1014,26 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
     }
 
     @Synchronized
-    private fun combineFailures(inputFailures: List<TrickleFailure>): TrickleFailure {
+    private fun combineFailures(inputFailures: List<RefillFailure>): RefillFailure {
         val allErrors = LinkedHashMap<ValueId, Throwable>()
         val allMissingInputs = LinkedHashSet<ValueId>()
         for (failure in inputFailures) {
             allErrors.putAll(failure.errors)
             allMissingInputs.addAll(failure.missingInputs)
         }
-        return TrickleFailure(allErrors, allMissingInputs)
+        return RefillFailure(allErrors, allMissingInputs)
     }
 
-    // TODO: This should probably just be a function on TrickleInput
+    // TODO: This should probably just be a function on RefillInput
     // TODO: This doesn't really work for keyed node outputs: we also need to be able to get both things tied to a key
     // and the list containing all the keys
     @Synchronized
-    private fun getValueIdFromInput(input: TrickleInput<*>, key: Any? = null): ValueId {
+    private fun getValueIdFromInput(input: RefillInput<*>, key: Any? = null): ValueId {
         return when (input) {
-            is TrickleBuiltNode -> ValueId.Nonkeyed(input.name)
-            is TrickleInput.KeyList<*> -> ValueId.FullKeyList(input.name)
-            is TrickleInput.Keyed<*, *> -> ValueId.Keyed(input.name, key)
-            is TrickleInput.FullKeyedList<*, *> -> ValueId.FullKeyedList(input.name)
+            is RefillBuiltNode -> ValueId.Nonkeyed(input.name)
+            is RefillInput.KeyList<*> -> ValueId.FullKeyList(input.name)
+            is RefillInput.Keyed<*, *> -> ValueId.Keyed(input.name, key)
+            is RefillInput.FullKeyedList<*, *> -> ValueId.FullKeyedList(input.name)
         }
     }
 
@@ -1053,7 +1052,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
     }
 
     @Synchronized
-    override fun reportResult(result: TrickleStepResult) {
+    override fun reportResult(result: RefillStepResult) {
         if (instanceId != result.instanceId) {
             throw IllegalArgumentException("Received a result that did not originate from this instance")
         }
@@ -1079,7 +1078,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
     private fun reportBasicResult(valueId: ValueId.Nonkeyed, timestamp: Long, result: Any?, error: Throwable?) {
         val valueHolder = values[valueId]
         if (valueHolder == null || timestamp > valueHolder.getTimestamp()) {
-            val failure = error?.let { TrickleFailure(mapOf(valueId to it), setOf()) }
+            val failure = error?.let { RefillFailure(mapOf(valueId to it), setOf()) }
             setValue(valueId, timestamp, result, failure)
         }
     }
@@ -1100,7 +1099,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
 
         val valueHolder = values[valueId]
         if (valueHolder == null || timestamp > valueHolder.getTimestamp()) {
-            val failure = error?.let { TrickleFailure(mapOf(valueId to it), setOf()) }
+            val failure = error?.let { RefillFailure(mapOf(valueId to it), setOf()) }
             setValue(valueId, timestamp, result, failure)
         }
         // TODO: For keyed nodes, also adjust the values/timestamps of the whole list (?)
@@ -1110,7 +1109,7 @@ class TrickleInstance internal constructor(override val definition: TrickleDefin
     private fun reportKeyListResult(valueId: ValueId.FullKeyList, timestamp: Long, result: Any?, error: Throwable?) {
         val valueHolder = values[valueId]
         if (valueHolder == null || timestamp > valueHolder.getTimestamp()) {
-            val failure = error?.let { TrickleFailure(mapOf(valueId to it), setOf()) }
+            val failure = error?.let { RefillFailure(mapOf(valueId to it), setOf()) }
             if (result == null) {
                 setValue(valueId, timestamp, null, failure)
             } else {
@@ -1343,7 +1342,7 @@ sealed class NodeOutcome<T> {
         }
     }
     data class Computed<T>(val value: T): NodeOutcome<T>()
-    data class Failure<T>(val failure: TrickleFailure): NodeOutcome<T>()
+    data class Failure<T>(val failure: RefillFailure): NodeOutcome<T>()
 }
 
 // For use with listeners
@@ -1351,30 +1350,30 @@ sealed class NodeOutcome<T> {
  * Note: The weird timestamp manipulation covers the following case:
  * - We have input keylist node A and non-input keyed node B sourced by A
  * - A change gets applied to A that removes and re-adds a key (i.e. an EditKeys with the key in both the removes and adds list)
- * - One event will get triggered for the key getting removed from B, and one from it being recomputed; the trickle instance will
+ * - One event will get triggered for the key getting removed from B, and one from it being recomputed; the Refill instance will
  *   give these both the same timestamp, so we differentiate the timestamps at the event level by giving KeyRemoved events lower
  *   timestamps than Computed or Failure events
  *
  * TODO: Shift this timestamp change to inside the instance so these can just be instantiated normally again
  */
-sealed class TrickleEvent<T> {
+sealed class RefillEvent<T> {
     abstract val valueId: ValueId
     abstract val timestamp: Long
-    data class Computed<T> private constructor(override val valueId: ValueId, val value: T, override val timestamp: Long): TrickleEvent<T>() {
+    data class Computed<T> private constructor(override val valueId: ValueId, val value: T, override val timestamp: Long): RefillEvent<T>() {
         companion object {
             fun <T> of(valueId: ValueId, value: T, timestamp: Long): Computed<T> {
                 return Computed(valueId, value, timestamp*2 + 1)
             }
         }
     }
-    data class Failure<T> private constructor(override val valueId: ValueId, val failure: TrickleFailure, override val timestamp: Long): TrickleEvent<T>() {
+    data class Failure<T> private constructor(override val valueId: ValueId, val failure: RefillFailure, override val timestamp: Long): RefillEvent<T>() {
         companion object {
-            fun <T> of(valueId: ValueId, failure: TrickleFailure, timestamp: Long): Failure<T> {
+            fun <T> of(valueId: ValueId, failure: RefillFailure, timestamp: Long): Failure<T> {
                 return Failure(valueId, failure, timestamp*2 + 1)
             }
         }
     }
-    data class KeyRemoved<T> private constructor(override val valueId: ValueId.Keyed, override val timestamp: Long): TrickleEvent<T>() {
+    data class KeyRemoved<T> private constructor(override val valueId: ValueId.Keyed, override val timestamp: Long): RefillEvent<T>() {
         companion object {
             fun <T> of(valueId: ValueId.Keyed, timestamp: Long): KeyRemoved<T> {
                 return KeyRemoved(valueId, timestamp*2)
@@ -1383,36 +1382,36 @@ sealed class TrickleEvent<T> {
     }
 }
 
-class TrickleStep internal constructor(
-    val valueId: ValueId,
-    val timestamp: Long,
-    val instanceId: TrickleInstance.Id,
-    val operation: () -> Any?,
-    val onCatch: ((TrickleFailure) -> Any?)?
+class RefillStep internal constructor(
+        val valueId: ValueId,
+        val timestamp: Long,
+        val instanceId: RefillInstance.Id,
+        val operation: () -> Any?,
+        val onCatch: ((RefillFailure) -> Any?)?
 ) {
-    fun execute(): TrickleStepResult {
+    fun execute(): RefillStepResult {
         try {
             val result = operation()
-            return TrickleStepResult(valueId, timestamp, instanceId, result, null)
+            return RefillStepResult(valueId, timestamp, instanceId, result, null)
         } catch (t: Throwable) {
             if (t is InterruptedException) {
                 Thread.currentThread().interrupt()
             }
             if (onCatch != null) {
                 try {
-                    val result = onCatch!!(TrickleFailure(mapOf(valueId to t), setOf()))
-                    return TrickleStepResult(valueId, timestamp, instanceId, result, null)
+                    val result = onCatch!!(RefillFailure(mapOf(valueId to t), setOf()))
+                    return RefillStepResult(valueId, timestamp, instanceId, result, null)
                 } catch (t2: Throwable) {
                     t.addSuppressed(t2)
-                    return TrickleStepResult(valueId, timestamp, instanceId, null, t)
+                    return RefillStepResult(valueId, timestamp, instanceId, null, t)
                 }
             }
-            return TrickleStepResult(valueId, timestamp, instanceId, null, t)
+            return RefillStepResult(valueId, timestamp, instanceId, null, t)
         }
     }
 
     override fun toString(): String {
-        return "TrickleStep($valueId, $timestamp)"
+        return "RefillStep($valueId, $timestamp)"
     }
 
     // Note: equals() and hashCode() ignore the operation
@@ -1420,7 +1419,7 @@ class TrickleStep internal constructor(
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
 
-        other as TrickleStep
+        other as RefillStep
 
         if (valueId != other.valueId) return false
         if (timestamp != other.timestamp) return false
@@ -1438,64 +1437,64 @@ class TrickleStep internal constructor(
     }
 }
 
-data class TrickleStepResult internal constructor(
-    val valueId: ValueId,
-    val timestamp: Long,
-    val instanceId: TrickleInstance.Id,
-    val result: Any?,
-    val error: Throwable?
+data class RefillStepResult internal constructor(
+        val valueId: ValueId,
+        val timestamp: Long,
+        val instanceId: RefillInstance.Id,
+        val result: Any?,
+        val error: Throwable?
 )
 
 // TODO: Add a method for turning this into a single Exception with a reasonable human-friendly summary
-data class TrickleFailure(val errors: Map<ValueId, Throwable>, val missingInputs: Set<ValueId>)
+data class RefillFailure(val errors: Map<ValueId, Throwable>, val missingInputs: Set<ValueId>)
 
 // General idea: For any possible state the input nodes could be in, the input and output set of changes should result
 // in the same end state, with the difference that the output set of changes contains only one entry per input node
-//private fun coalesceChanges(changes: List<TrickleInputChange>, definition: TrickleDefinition): List<TrickleInputChange> {
-//    val changePerNode = LinkedHashMap<GenericNodeName, TrickleInputChange>()
+//private fun coalesceChanges(changes: List<RefillInputChange>, definition: RefillDefinition): List<RefillInputChange> {
+//    val changePerNode = LinkedHashMap<GenericNodeName, RefillInputChange>()
 //
 //    for (curChange in changes) {
 //        val existingChange = changePerNode[curChange.nodeName]
 //        if (existingChange == null) {
 //            changePerNode[curChange.nodeName] = curChange
 //        } else {
-//            val modifiedChange: TrickleInputChange = when (curChange) {
-//                is TrickleInputChange.SetBasic<*> -> {
+//            val modifiedChange: RefillInputChange = when (curChange) {
+//                is RefillInputChange.SetBasic<*> -> {
 //                    // New change overwrites the old
 //                    curChange
 //                }
-//                is TrickleInputChange.SetKeys<*> -> {
+//                is RefillInputChange.SetKeys<*> -> {
 //                    // New change overwrites the old
 //                    curChange
 //                }
-//                is TrickleInputChange.EditKeys<*> -> {
+//                is RefillInputChange.EditKeys<*> -> {
 //                    val nodeName = curChange.nodeName as KeyListNodeName<Any?>
 //                    when (existingChange) {
-//                        is TrickleInputChange.SetBasic<*> -> error("Refill internal error")
-//                        is TrickleInputChange.SetKeys<*> -> {
+//                        is RefillInputChange.SetBasic<*> -> error("Refill internal error")
+//                        is RefillInputChange.SetKeys<*> -> {
 //                            var keys = KeyList.copyOf(existingChange.value)
 //                            keys = keys.removeAll(curChange.keysRemoved)
 //                            keys = keys.addAll(curChange.keysAdded)
-//                            TrickleInputChange.SetKeys(nodeName, keys.asList())
+//                            RefillInputChange.SetKeys(nodeName, keys.asList())
 //                        }
-//                        is TrickleInputChange.EditKeys<*> -> {
+//                        is RefillInputChange.EditKeys<*> -> {
 //                            val keysRemoved = existingChange.keysRemoved + curChange.keysRemoved
 //                            val keysAdded = (existingChange.keysAdded - curChange.keysRemoved) + curChange.keysAdded
-//                            TrickleInputChange.EditKeys(nodeName, keysAdded, keysRemoved)
+//                            RefillInputChange.EditKeys(nodeName, keysAdded, keysRemoved)
 //                        }
-//                        is TrickleInputChange.SetKeyed<*, *> -> TODO()
+//                        is RefillInputChange.SetKeyed<*, *> -> TODO()
 //                    }
 //                }
-//                is TrickleInputChange.SetKeyed<*, *> -> {
+//                is RefillInputChange.SetKeyed<*, *> -> {
 //                    when (existingChange) {
-//                        is TrickleInputChange.SetBasic<*> -> TODO()
-//                        is TrickleInputChange.SetKeys<*> -> TODO()
-//                        is TrickleInputChange.EditKeys<*> -> TODO()
-//                        is TrickleInputChange.SetKeyed<*, *> -> {
+//                        is RefillInputChange.SetBasic<*> -> TODO()
+//                        is RefillInputChange.SetKeys<*> -> TODO()
+//                        is RefillInputChange.EditKeys<*> -> TODO()
+//                        is RefillInputChange.SetKeyed<*, *> -> {
 //                            val map = HashMap<Any?, Any?>()
 //                            map.putAll(existingChange.map)
 //                            map.putAll(curChange.map)
-//                            TrickleInputChange.SetKeyed(curChange.nodeName as KeyedNodeName<Any?, Any?>, map)
+//                            RefillInputChange.SetKeyed(curChange.nodeName as KeyedNodeName<Any?, Any?>, map)
 //                        }
 //                    }
 //                }
@@ -1514,21 +1513,21 @@ data class TrickleFailure(val errors: Map<ValueId, Throwable>, val missingInputs
 //        // We could still do this if we split up the keyed changes by their keys, but that's kinda hacky and still
 //        // results in listeners triggering on otherwise invisible values.
 //        // So... switch to a listener suppression/aggregation approach elsewhere?
-//        if (curChange is TrickleInputChange.SetKeys<*> || curChange is TrickleInputChange.EditKeys<*>) {
+//        if (curChange is RefillInputChange.SetKeys<*> || curChange is RefillInputChange.EditKeys<*>) {
 //            for ((keyedName, change) in changePerNode.entries.toList()) {
 //                if (keyedName is KeyedNodeName<*, *>) {
 //                    if (curChange.nodeName == definition.keyedNodes[keyedName]!!.keySourceName) {
-//                        change as TrickleInputChange.SetKeyed<*, *>
+//                        change as RefillInputChange.SetKeyed<*, *>
 //                        // Remove any key-setting in keys being removed or not included
-//                        val modifiedMap = if (curChange is TrickleInputChange.SetKeys<*>) {
+//                        val modifiedMap = if (curChange is RefillInputChange.SetKeys<*>) {
 //                            val keysAsSet = curChange.value.toSet()
 //                            change.map.filterKeys { keysAsSet.contains(it) }
 //                        } else {
-//                            curChange as TrickleInputChange.EditKeys<*>
+//                            curChange as RefillInputChange.EditKeys<*>
 //                            val keysRemovedAsSet = curChange.keysRemoved.toSet()
 //                            change.map.filterKeys { !keysRemovedAsSet.contains(it) }
 //                        }
-//                        changePerNode[keyedName] = TrickleInputChange.SetKeyed(keyedName as KeyedNodeName<Any?, Any?>, modifiedMap)
+//                        changePerNode[keyedName] = RefillInputChange.SetKeyed(keyedName as KeyedNodeName<Any?, Any?>, modifiedMap)
 //                    }
 //                }
 //            }

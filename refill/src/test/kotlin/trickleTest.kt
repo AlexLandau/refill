@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicReference
 // TODO: Test multi-input setting and consistency
 // (regression test: short-circuiting or in the wrong spot)
 
-class TrickleTests {
+class RefillTests {
     private val A = NodeName<Int>("a")
     private val B = NodeName<Int>("b")
     private val C = NodeName<Int>("c")
@@ -35,8 +35,8 @@ class TrickleTests {
     private val F_KEYED = KeyedNodeName<Int, Int>("fKeyed")
 
     @Test
-    fun testTrickleBasic() {
-        val builder = TrickleDefinitionBuilder()
+    fun testRefillBasic() {
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         // TODO: It would be nice if we could pass in the NodeName as an input
@@ -61,7 +61,7 @@ class TrickleTests {
 
     @Test
     fun testApplyingResultsAfterMultipleInputs() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createNode(B, aNode, { it + 1 })
@@ -89,7 +89,7 @@ class TrickleTests {
 
     @Test
     fun testApplyingResultsOutOfOrderDoesNotMatter() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createNode(B, aNode, { it + 1 })
@@ -126,7 +126,7 @@ class TrickleTests {
 
     @Test
     fun testCaseTryingToTrickTimestamps() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createNode(B, aNode, { it + 1 })
@@ -164,7 +164,7 @@ class TrickleTests {
     }
 
     fun testCanGetStepsWithInputsUndefined() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createNode(B, aNode, { it + 1 })
@@ -176,11 +176,11 @@ class TrickleTests {
     }
 
     private fun inputsMissingOutcome(vararg valueIds: ValueId): NodeOutcome.Failure<Int> {
-        return NodeOutcome.Failure(TrickleFailure(mapOf(), valueIds.toSet()))
+        return NodeOutcome.Failure(RefillFailure(mapOf(), valueIds.toSet()))
     }
 
     fun testCannotGetStepsWithInputsUndefined2() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createNode(B, aNode, { it + 1 })
@@ -196,7 +196,7 @@ class TrickleTests {
 
     @Test
     fun testUncaughtExceptionInCalculation() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createNode(B, aNode, { throw RuntimeException("custom exception message") })
@@ -217,7 +217,7 @@ class TrickleTests {
 
     @Test
     fun testUpstreamUncaughtException() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createNode(B, aNode, { throw RuntimeException("custom exception message") })
@@ -239,7 +239,7 @@ class TrickleTests {
 
     @Test
     fun testUpstreamMixedMissingAndException() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val exception = java.lang.RuntimeException("simulated failure")
 
@@ -254,7 +254,7 @@ class TrickleTests {
         instance.completeSynchronously()
         val outcome = instance.getNodeOutcome(D)
         assertEquals(
-                NodeOutcome.Failure<Int>(TrickleFailure(
+                NodeOutcome.Failure<Int>(RefillFailure(
                         mapOf(ValueId.Nonkeyed(C) to exception),
                         setOf(ValueId.Nonkeyed(B)))),
                 outcome)
@@ -262,7 +262,7 @@ class TrickleTests {
 
     @Test
     fun testCatchExceptionInNode() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createNode(B, aNode, { throw RuntimeException("custom exception message") }, { failures -> -1 })
@@ -284,7 +284,7 @@ class TrickleTests {
     // TODO: Should a catch block also apply to the node's own computation? Also, what if the node fails itself?
     @Test
     fun testCatchUpstreamException() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createNode(B, aNode, { throw RuntimeException("custom exception message") })
@@ -305,7 +305,7 @@ class TrickleTests {
 
     @Test
     fun testCatchUpstreamException2() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createNode(B, aNode, { throw RuntimeException("custom exception message") })
@@ -327,7 +327,7 @@ class TrickleTests {
 
     @Test
     fun testKeyListNode1() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
 
@@ -342,7 +342,7 @@ class TrickleTests {
 
     @Test
     fun testKeyListNode2() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         // Note: This is not a realistic example; summing over a set (vs. a list) is usually not useful
@@ -360,7 +360,7 @@ class TrickleTests {
 
     @Test
     fun testKeyListNode3() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bKeys = builder.createKeyListNode(B_KEYS, aNode, { (1..it).toList() })
@@ -377,7 +377,7 @@ class TrickleTests {
 
     @Test
     fun testCatchingKeyListNode() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aNode = builder.createInputNode(A)
         val bNode = builder.createNode(B, aNode, { error("Something went wrong") })
@@ -392,7 +392,7 @@ class TrickleTests {
 
     @Test
     fun testCatchingKeyedNode1() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { error("Something went wrong") }, { _ -> -1})
@@ -412,7 +412,7 @@ class TrickleTests {
 
     @Test
     fun testCatchingKeyedNode2() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, {
@@ -428,7 +428,7 @@ class TrickleTests {
 
     @Test
     fun testCatchingKeyedNode3() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { if (it >= 0) it else error("Something went wrong") })
@@ -454,7 +454,7 @@ class TrickleTests {
 
     @Test
     fun testCatchingKeyedNodeErrors4() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { if (it >= 0) it else error("Something went wrong") })
@@ -474,7 +474,7 @@ class TrickleTests {
 
     @Test
     fun testCatchingKeyedNodeErrors5() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { if (it >= 0) it else error("Something went wrong") }, { _ -> -1 })
@@ -489,7 +489,7 @@ class TrickleTests {
 
     @Test
     fun testKeyListInputBehavior() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
 
@@ -540,7 +540,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedNode1() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { it * 2})
@@ -559,7 +559,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedNode2() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { it * 2})
@@ -572,7 +572,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedNode3() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bNode = builder.createInputNode(B)
@@ -593,7 +593,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedInputNode1() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -615,7 +615,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedInputNode2() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -642,7 +642,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedValuesNotRecomputedWhenKeyOrderChanges() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { it * 2})
@@ -661,7 +661,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedValuesNotRecomputedWhenSingleKeyAdded() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { it * 2})
@@ -680,7 +680,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedNodeOutputs1() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { it * 2})
@@ -694,7 +694,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedNodeOutputs2() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { it * 2})
@@ -707,8 +707,8 @@ class TrickleTests {
     }
 
     @Test
-    fun testTrickleSyncIsLazy1() {
-        val builder = TrickleDefinitionBuilder()
+    fun testRefillSyncIsLazy1() {
+        val builder = RefillDefinitionBuilder()
 
         val didUnnecessaryWork = AtomicBoolean(false)
 
@@ -725,8 +725,8 @@ class TrickleTests {
     }
 
     @Test
-    fun testTrickleSyncIsLazy2() {
-        val builder = TrickleDefinitionBuilder()
+    fun testRefillSyncIsLazy2() {
+        val builder = RefillDefinitionBuilder()
 
         val didUnnecessaryWork = AtomicBoolean(false)
 
@@ -752,7 +752,7 @@ class TrickleTests {
     @Test
     fun testBehaviorWhenNodeDependsOnlyOnKeyListInputs() {
         // Key lists default to true, so values can be computed without setting any inputs
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val b = builder.createNode(B, aKeys.listOutput(), { it.sum() })
@@ -767,7 +767,7 @@ class TrickleTests {
 
     @Test
     fun testGettingKeyedValuesForNonexistentKey() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { it * 2 })
@@ -783,7 +783,7 @@ class TrickleTests {
 
     @Test
     fun testGettingKeyedValuesForRemovedKey1() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { it * 2 })
@@ -803,7 +803,7 @@ class TrickleTests {
 
     @Test
     fun testGettingKeyedValuesForRemovedKey2() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { it * 2 })
@@ -823,7 +823,7 @@ class TrickleTests {
 
     @Test
     fun testFullOutputsFromKeyedNodeWhenKeyListIsSometimesEmpty() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val a = builder.createInputNode(A)
         val bKeys = builder.createKeyListInputNode(B_KEYS)
@@ -842,7 +842,7 @@ class TrickleTests {
 
     @Test
     fun testNodeGetsHungUpByOtherNodeBecomingNonempty() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val a = builder.createInputNode(A)
         val bKeys = builder.createKeyListInputNode(B_KEYS)
@@ -867,7 +867,7 @@ class TrickleTests {
 
     @Test
     fun testNodeGetsHungUpByKeyedInputNode() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -893,7 +893,7 @@ class TrickleTests {
 
     @Test
     fun testSettingKeyedInputBeforeKeyExists1() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -912,7 +912,7 @@ class TrickleTests {
 
     @Test
     fun testSettingKeyedInputBeforeKeyExists2() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -931,7 +931,7 @@ class TrickleTests {
 
     @Test(expected = IllegalStateException::class)
     fun testCannotUseNonInputKeyListAsKeyedInputSource() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val a = builder.createInputNode(A)
         val bKeys = builder.createKeyListNode(B_KEYS, a, { (0..it).toList() })
@@ -940,7 +940,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedInputsGiveOutOfDateKeyedOutputsWhenKeysChange1() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val bKeys = builder.createKeyListInputNode(B_KEYS)
         val dKeyed = builder.createKeyedInputNode(D_KEYED, bKeys)
@@ -965,7 +965,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedInputsGiveOutOfDateKeyedOutputsWhenKeysChange2() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val bKeys = builder.createKeyListInputNode(B_KEYS)
         val dKeyed = builder.createKeyedInputNode(D_KEYED, bKeys)
@@ -989,7 +989,7 @@ class TrickleTests {
 
     @Test
     fun testSyncKeyedInputsBug() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -1004,7 +1004,7 @@ class TrickleTests {
 
     @Test
     fun testRawKeyedInputsBug() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -1020,7 +1020,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedInputsRemovedAfterKeyRemoved1() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -1040,7 +1040,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedInputsRemovedAfterKeyRemoved2() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -1059,7 +1059,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedValuesClearedWhenInputListsInvalidated1() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val b = builder.createInputNode(B)
@@ -1089,7 +1089,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedValuesClearedWhenInputListsInvalidated2() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val b = builder.createInputNode(B)
@@ -1118,10 +1118,10 @@ class TrickleTests {
 
     @Test
     fun testErrorPropagationPastKeyedNodeOfKeyListFailure() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val exception = RuntimeException("error creating list")
-        val failure = TrickleFailure(mapOf(ValueId.FullKeyList(A_KEYS) to exception), setOf())
+        val failure = RefillFailure(mapOf(ValueId.FullKeyList(A_KEYS) to exception), setOf())
 
         val aKeys = builder.createKeyListNode(A_KEYS, listOf(), { throw exception }, null)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { it + 1 })
@@ -1143,7 +1143,7 @@ class TrickleTests {
     @Ignore("I'll come back to this later")
     @Test
     fun testArgumentEqualityCheck1() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         var computationCount = 0
         // TODO: Next step is to figure out the right way to pass in "If this is equal, don't recompute outputs" to A
@@ -1173,7 +1173,7 @@ class TrickleTests {
 
     @Test
     fun testBasicAsync1() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val a = builder.createInputNode(A)
         val b = builder.createNode(B, a, { it + 1 })
@@ -1202,7 +1202,7 @@ class TrickleTests {
 
     @Test
     fun testBasicAsync2() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val a = builder.createInputNode(A)
         val b = builder.createNode(B, a, { it + 1 })
@@ -1225,7 +1225,7 @@ class TrickleTests {
 
     @Test
     fun testAsyncTimeout1() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val a = builder.createInputNode(A)
         val b = builder.createNode(B, a, { Thread.sleep(100); it + 1 })
@@ -1243,7 +1243,7 @@ class TrickleTests {
 
     @Test
     fun testAsyncTimeout2() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val a = builder.createInputNode(A)
         val b = builder.createNode(B, a, { Thread.sleep(1000); it + 1 })
@@ -1263,7 +1263,7 @@ class TrickleTests {
 
     @Test
     fun testAsyncNoSuchKey() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -1279,7 +1279,7 @@ class TrickleTests {
 
     @Test
     fun testAsyncMissingInputBasic() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val a = builder.createInputNode(A)
         val b = builder.createNode(B, a, { it + 1 })
@@ -1287,8 +1287,8 @@ class TrickleTests {
         val instance = builder.build().instantiateAsync(Executors.newCachedThreadPool())
 
         try {
-            assertEquals(NodeOutcome.Failure<Int>(TrickleFailure(mapOf(), setOf(ValueId.Nonkeyed(A)))), instance.getOutcome(A, 1, TimeUnit.SECONDS))
-            assertEquals(NodeOutcome.Failure<Int>(TrickleFailure(mapOf(), setOf(ValueId.Nonkeyed(A)))), instance.getOutcome(B, 1, TimeUnit.SECONDS))
+            assertEquals(NodeOutcome.Failure<Int>(RefillFailure(mapOf(), setOf(ValueId.Nonkeyed(A)))), instance.getOutcome(A, 1, TimeUnit.SECONDS))
+            assertEquals(NodeOutcome.Failure<Int>(RefillFailure(mapOf(), setOf(ValueId.Nonkeyed(A)))), instance.getOutcome(B, 1, TimeUnit.SECONDS))
         } finally {
             instance.shutdown()
         }
@@ -1296,7 +1296,7 @@ class TrickleTests {
 
     @Test
     fun testKeyUpdatesUpdateKeyedTimestamps() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { it + 1 })
@@ -1318,7 +1318,7 @@ class TrickleTests {
 
     @Test
     fun testAsyncMissingKeyedInput1() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -1326,12 +1326,12 @@ class TrickleTests {
         val instance = builder.build().instantiateAsync(Executors.newCachedThreadPool())
 
         assertEquals(NodeOutcome.NoSuchKey.get<Int>(), instance.getOutcome(B_KEYED, 1, 1, TimeUnit.SECONDS))
-//        assertEquals(NodeOutcome.Failure<Int>(TrickleFailure(mapOf(), setOf(ValueId.Nonkeyed(A)))), instance.getOutcome(B_KEYED, 1, 1, TimeUnit.SECONDS))
+//        assertEquals(NodeOutcome.Failure<Int>(RefillFailure(mapOf(), setOf(ValueId.Nonkeyed(A)))), instance.getOutcome(B_KEYED, 1, 1, TimeUnit.SECONDS))
     }
 
     @Test
     fun testAsyncMissingKeyedInput2() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -1339,12 +1339,12 @@ class TrickleTests {
         val instance = builder.build().instantiateAsync(Executors.newCachedThreadPool())
 
         val ts = instance.addKeyInput(A_KEYS, 1)
-        assertEquals(NodeOutcome.Failure<Int>(TrickleFailure(mapOf(), setOf(ValueId.Keyed(B_KEYED, 1)))), instance.getOutcome(B_KEYED, 1, 1, TimeUnit.SECONDS, ts))
+        assertEquals(NodeOutcome.Failure<Int>(RefillFailure(mapOf(), setOf(ValueId.Keyed(B_KEYED, 1)))), instance.getOutcome(B_KEYED, 1, 1, TimeUnit.SECONDS, ts))
     }
 
     @Test
     fun testAsyncMissingKeyedInput3() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -1358,18 +1358,18 @@ class TrickleTests {
         instance.setInput(A_KEYS, listOf(14, 6, 4, 13, 11, 8))
         instance.addKeyInput(A_KEYS, 18)
         var timestamp = instance.setKeyedInput(B_KEYED, 13, 26)
-        assertEquals(NodeOutcome.Failure<Int>(TrickleFailure(mapOf(), setOf(ValueId.Keyed(B_KEYED, 4)))), instance.getOutcome(B_KEYED, 4, 5, TimeUnit.SECONDS, timestamp))
+        assertEquals(NodeOutcome.Failure<Int>(RefillFailure(mapOf(), setOf(ValueId.Keyed(B_KEYED, 4)))), instance.getOutcome(B_KEYED, 4, 5, TimeUnit.SECONDS, timestamp))
         instance.setInput(A_KEYS, listOf(104, 98, 101))
         instance.addKeyInput(A_KEYS, 34)
         instance.setKeyedInput(B_KEYED, 98, 84)
         instance.setKeyedInput(B_KEYED, 98, 53)
         timestamp = instance.removeKeyInput(A_KEYS, 101)
-        assertEquals(NodeOutcome.Failure<Int>(TrickleFailure(mapOf(), setOf(ValueId.Keyed(B_KEYED, 34)))), instance.getOutcome(B_KEYED, 34, timestamp))
+        assertEquals(NodeOutcome.Failure<Int>(RefillFailure(mapOf(), setOf(ValueId.Keyed(B_KEYED, 34)))), instance.getOutcome(B_KEYED, 34, timestamp))
     }
 
     @Test
     fun testAsyncListeners1() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val a = builder.createInputNode(A)
         val b = builder.createNode(B, a, {it + 1})
@@ -1378,22 +1378,22 @@ class TrickleTests {
 
         try {
             instance.setInput(A, 3)
-            val listenedBValue = AtomicReference<TrickleEvent<Int>>()
+            val listenedBValue = AtomicReference<RefillEvent<Int>>()
             // Try adding the listener after the input is already set
-            instance.addBasicListener(B, TrickleEventListener { event ->
+            instance.addBasicListener(B, RefillEventListener { event ->
                 listenedBValue.set(event)
             })
             await().untilAsserted {
                 val event = listenedBValue.get()
-                assertTrue(event is TrickleEvent.Computed)
-                assertEquals(4, (event as TrickleEvent.Computed).value)
+                assertTrue(event is RefillEvent.Computed)
+                assertEquals(4, (event as RefillEvent.Computed).value)
             }
             // Now try a change after the listener was added
             instance.setInput(A, 10)
             await().untilAsserted {
                 val event = listenedBValue.get()
-                assertTrue(event is TrickleEvent.Computed)
-                assertEquals(11, (event as TrickleEvent.Computed).value)
+                assertTrue(event is RefillEvent.Computed)
+                assertEquals(11, (event as RefillEvent.Computed).value)
             }
         } finally {
             instance.shutdown()
@@ -1402,7 +1402,7 @@ class TrickleTests {
 
     @Test
     fun testListenerNotInvokedForNonfinalValuesInInputs() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val a = builder.createInputNode(A)
 
@@ -1412,7 +1412,7 @@ class TrickleTests {
         val saw3Latch = CountDownLatch(1)
 
         instance.setValueListener { event ->
-            if (event is TrickleEvent.Computed) {
+            if (event is RefillEvent.Computed) {
                 if (event.value == 2) {
                     saw2.set(true)
                 } else if (event.value == 3) {
@@ -1422,8 +1422,8 @@ class TrickleTests {
         }
 
         instance.setInputs(listOf(
-            TrickleInputChange.SetBasic(A, 2),
-            TrickleInputChange.SetBasic(A, 3)
+            RefillInputChange.SetBasic(A, 2),
+            RefillInputChange.SetBasic(A, 3)
         ))
 
         val foundSuccessfully = saw3Latch.await(10, TimeUnit.SECONDS)
@@ -1434,7 +1434,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedValuesGetRemovedWhenInputKeysRemovedViaSetting() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { it + 1 })
@@ -1450,7 +1450,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedValuesGetRemovedWhenInputKeysRemovedViaEditing() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { it + 1 })
@@ -1467,7 +1467,7 @@ class TrickleTests {
 
     @Test
     fun testKeyedValuesGetRemovedWhenNonInputKeysRemoved() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val a = builder.createInputNode(A)
         val bKeys = builder.createKeyListNode(B_KEYS, a, { (1..it).toList() })
@@ -1486,7 +1486,7 @@ class TrickleTests {
 
     @Test
     fun testGettingSingleKeyValues() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
 
@@ -1501,7 +1501,7 @@ class TrickleTests {
 
     @Test
     fun testGettingSingleKeyValues2() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
 
@@ -1516,7 +1516,7 @@ class TrickleTests {
 
     @Test
     fun testGettingSingleKeyValues3() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
 
@@ -1531,7 +1531,7 @@ class TrickleTests {
 
     @Test
     fun testErrorFromKeyedInputsListOutput() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -1541,12 +1541,12 @@ class TrickleTests {
         instance.setInput(A_KEYS, listOf(1, 2, 3))
         // This propagates the error
         instance.getNextSteps()
-        assertEquals(NodeOutcome.Failure<List<Int>>(TrickleFailure(mapOf(), setOf(ValueId.Keyed(B_KEYED, 1), ValueId.Keyed(B_KEYED, 2), ValueId.Keyed(B_KEYED, 3)))), instance.getNodeOutcome(B_KEYED))
+        assertEquals(NodeOutcome.Failure<List<Int>>(RefillFailure(mapOf(), setOf(ValueId.Keyed(B_KEYED, 1), ValueId.Keyed(B_KEYED, 2), ValueId.Keyed(B_KEYED, 3)))), instance.getNodeOutcome(B_KEYED))
     }
 
     @Test
     fun testSettingKeyedInputSimultaneouslyWithKeyAddition1() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -1554,8 +1554,8 @@ class TrickleTests {
         val instance = builder.build().instantiateRaw()
 
         instance.setInputs(listOf(
-            TrickleInputChange.SetKeys(A_KEYS, listOf(1)),
-            TrickleInputChange.SetKeyed(B_KEYED, mapOf(1 to 10))
+            RefillInputChange.SetKeys(A_KEYS, listOf(1)),
+            RefillInputChange.SetKeyed(B_KEYED, mapOf(1 to 10))
         ))
         assertEquals(NodeOutcome.Computed(10), instance.getNodeOutcome(B_KEYED, 1))
     }
@@ -1563,7 +1563,7 @@ class TrickleTests {
     // Note the reversed order compared with the previous test
     @Test
     fun testSettingKeyedInputSimultaneouslyWithKeyAddition2() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -1571,17 +1571,17 @@ class TrickleTests {
         val instance = builder.build().instantiateRaw()
 
         instance.setInputs(listOf(
-            TrickleInputChange.SetKeyed(B_KEYED, mapOf(1 to 10)),
-            TrickleInputChange.SetKeys(A_KEYS, listOf(1))
+            RefillInputChange.SetKeyed(B_KEYED, mapOf(1 to 10)),
+            RefillInputChange.SetKeys(A_KEYS, listOf(1))
         ))
         instance.getNextSteps()
-        assertEquals(NodeOutcome.Failure<Int>(TrickleFailure(mapOf(), setOf(ValueId.Keyed(B_KEYED, 1)))), instance.getNodeOutcome(B_KEYED, 1))
+        assertEquals(NodeOutcome.Failure<Int>(RefillFailure(mapOf(), setOf(ValueId.Keyed(B_KEYED, 1)))), instance.getNodeOutcome(B_KEYED, 1))
     }
 
     // Coalescing shouldn't mess this up
     @Test
     fun testSettingKeyedInputSimultaneouslyWithKeyAddition3() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -1589,9 +1589,9 @@ class TrickleTests {
         val instance = builder.build().instantiateRaw()
 
         instance.setInputs(listOf(
-            TrickleInputChange.SetKeyed(B_KEYED, mapOf(2 to 20)),
-            TrickleInputChange.SetKeys(A_KEYS, listOf(1)),
-            TrickleInputChange.SetKeyed(B_KEYED, mapOf(1 to 10))
+            RefillInputChange.SetKeyed(B_KEYED, mapOf(2 to 20)),
+            RefillInputChange.SetKeys(A_KEYS, listOf(1)),
+            RefillInputChange.SetKeyed(B_KEYED, mapOf(1 to 10))
         ))
         instance.getNextSteps()
         assertEquals(NodeOutcome.Computed(10), instance.getNodeOutcome(B_KEYED, 1))
@@ -1600,7 +1600,7 @@ class TrickleTests {
     // Coalescing shouldn't mess this up
     @Test
     fun testSettingKeyedInputSimultaneouslyWithKeyAddition4() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedInputNode(B_KEYED, aKeys)
@@ -1608,17 +1608,17 @@ class TrickleTests {
         val instance = builder.build().instantiateRaw()
 
         instance.setInputs(listOf(
-            TrickleInputChange.SetKeyed(B_KEYED, mapOf(1 to 10)),
-            TrickleInputChange.SetKeys(A_KEYS, listOf(1)),
-            TrickleInputChange.SetKeyed(B_KEYED, mapOf(2 to 20))
+            RefillInputChange.SetKeyed(B_KEYED, mapOf(1 to 10)),
+            RefillInputChange.SetKeys(A_KEYS, listOf(1)),
+            RefillInputChange.SetKeyed(B_KEYED, mapOf(2 to 20))
         ))
         instance.getNextSteps()
-        assertEquals(NodeOutcome.Failure<Int>(TrickleFailure(mapOf(), setOf(ValueId.Keyed(B_KEYED, 1)))), instance.getNodeOutcome(B_KEYED, 1))
+        assertEquals(NodeOutcome.Failure<Int>(RefillFailure(mapOf(), setOf(ValueId.Keyed(B_KEYED, 1)))), instance.getNodeOutcome(B_KEYED, 1))
     }
 
     @Test
     fun testRemovingAndReaddingKeyGivesDifferentKeyedEventTimestamps() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { it + 1 })
@@ -1626,10 +1626,10 @@ class TrickleTests {
         val instance = builder.build().instantiateAsync(Executors.newCachedThreadPool())
 
         try {
-            val initialComputationEvent = CompletableFuture<TrickleEvent<Int>>()
-            val removalEvent = CompletableFuture<TrickleEvent<Int>>()
-            val recomputedEvent = CompletableFuture<TrickleEvent<Int>>()
-            instance.addPerKeyListener(B_KEYED, TrickleEventListener<Int> { event: TrickleEvent<Int> ->
+            val initialComputationEvent = CompletableFuture<RefillEvent<Int>>()
+            val removalEvent = CompletableFuture<RefillEvent<Int>>()
+            val recomputedEvent = CompletableFuture<RefillEvent<Int>>()
+            instance.addPerKeyListener(B_KEYED, RefillEventListener<Int> { event: RefillEvent<Int> ->
                 if ((event.valueId as? ValueId.Keyed)?.key?.equals(1) == true) {
                     if (!initialComputationEvent.isDone()) {
                         initialComputationEvent.complete(event)
@@ -1644,15 +1644,15 @@ class TrickleTests {
             })
             instance.setInput(A_KEYS, listOf(1, 2, 3))
             val event1 = initialComputationEvent.get(10, TimeUnit.SECONDS)
-            assertTrue(event1 is TrickleEvent.Computed && event1.value == 2)
+            assertTrue(event1 is RefillEvent.Computed && event1.value == 2)
             instance.setInputs(listOf(
-                TrickleInputChange.SetKeys(A_KEYS, listOf(2, 3)),
-                TrickleInputChange.SetKeys(A_KEYS, listOf(1, 2))
+                RefillInputChange.SetKeys(A_KEYS, listOf(2, 3)),
+                RefillInputChange.SetKeys(A_KEYS, listOf(1, 2))
             ))
             val event2 = removalEvent.get(10, TimeUnit.SECONDS)
-            assertTrue(event2 is TrickleEvent.KeyRemoved)
+            assertTrue(event2 is RefillEvent.KeyRemoved)
             val event3 = recomputedEvent.get(10, TimeUnit.SECONDS)
-            assertTrue(event3 is TrickleEvent.Computed && event3.value == 2)
+            assertTrue(event3 is RefillEvent.Computed && event3.value == 2)
             assertTrue(event1.timestamp < event2.timestamp)
             assertTrue(event2.timestamp < event3.timestamp)
         } finally {
@@ -1662,7 +1662,7 @@ class TrickleTests {
 
     @Test
     fun testRemovingAndReaddingKeyWorksWithAsyncGetters() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { it + 1 })
@@ -1672,8 +1672,8 @@ class TrickleTests {
         try {
             instance.setInput(A_KEYS, listOf(1, 2, 3))
             val timestamp = instance.setInputs(listOf(
-                TrickleInputChange.SetKeys(A_KEYS, listOf(2, 3)),
-                TrickleInputChange.SetKeys(A_KEYS, listOf(1, 2))
+                RefillInputChange.SetKeys(A_KEYS, listOf(2, 3)),
+                RefillInputChange.SetKeys(A_KEYS, listOf(1, 2))
             ))
             val outcome = instance.getOutcome(B_KEYED, 1, 10, TimeUnit.SECONDS, timestamp)
             assertEquals(NodeOutcome.Computed(2), outcome)
@@ -1684,7 +1684,7 @@ class TrickleTests {
 
     @Test
     fun testReceivingObsoleteComputedKeyEventDoesntTriggerListener() {
-        val builder = TrickleDefinitionBuilder()
+        val builder = RefillDefinitionBuilder()
 
         val aKeys = builder.createKeyListInputNode(A_KEYS)
         val bKeyed = builder.createKeyedNode(B_KEYED, aKeys, { it + 1 })
@@ -1693,7 +1693,7 @@ class TrickleTests {
 
         var sawComputedResult = false
         instance.setValueListener { event ->
-            if (event is TrickleEvent.Computed<*> && event.valueId == ValueId.Keyed(B_KEYED, 1)) {
+            if (event is RefillEvent.Computed<*> && event.valueId == ValueId.Keyed(B_KEYED, 1)) {
                 sawComputedResult = true
             }
         }

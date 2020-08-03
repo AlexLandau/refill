@@ -1,6 +1,5 @@
 package net.semlang.refill
 
-import java.lang.Exception
 import java.util.*
 import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicBoolean
@@ -40,16 +39,16 @@ else the internal "execute something" job is going to need to do.
 
 // This is probably not a great name, but needs to be public API
 // TODO: Explain how this works, because it's unintuitive
-class TrickleAsyncTimestamp
+class RefillAsyncTimestamp
 
-data class TimestampedInput(val inputs: List<TrickleInputChange>, val timestamp: TrickleAsyncTimestamp)
+data class TimestampedInput(val inputs: List<RefillInputChange>, val timestamp: RefillAsyncTimestamp)
 
 // TODO: Should we add a finalizer on this to shut down the executor when the instance itself gets GCed?
-class TrickleAsyncInstance(private val instance: TrickleInstance, private val executor: ExecutorService) {
+class RefillAsyncInstance(private val instance: RefillInstance, private val executor: ExecutorService) {
     // Use with care; note the use of synchronizedMap.
     // Keys should be added by the instantiator of the async timestamp.
     // Keys will be removed by garbage collection only.
-    private val asyncToRawTimestampMap = Collections.synchronizedMap(WeakHashMap<TrickleAsyncTimestamp, CompletableFuture<Long>>())
+    private val asyncToRawTimestampMap = Collections.synchronizedMap(WeakHashMap<RefillAsyncTimestamp, CompletableFuture<Long>>())
     // Unguarded; BlockingQueue handles multithreaded access
     private val inputsQueue: BlockingQueue<TimestampedInput> = LinkedBlockingQueue<TimestampedInput>()
 
@@ -76,17 +75,17 @@ class TrickleAsyncInstance(private val instance: TrickleInstance, private val ex
     private val managementJobLock = ReentrantLock()
 
     // This is guarded by the management job lock; it should only be used by the management job
-    private val enqueuedJobTasks = HashMap<TrickleStep, Future<*>>()
+    private val enqueuedJobTasks = HashMap<RefillStep, Future<*>>()
 
     // Unguarded; operations are synchronized
     private val timestampBarriers = TimestampBarrierMultimap()
 
     // Listeners
     // TODO: Guard
-    private val basicListeners = HashMap<NodeName<*>, ArrayList<TrickleEventListener<*>>>()
-    private val keyListListeners = HashMap<KeyListNodeName<*>, ArrayList<TrickleEventListener<*>>>()
-    private val fullKeyedListListeners = HashMap<KeyedNodeName<*, *>, ArrayList<TrickleEventListener<*>>>()
-    private val keyedValueListeners = HashMap<KeyedNodeName<*, *>, ArrayList<TrickleEventListener<*>>>()
+    private val basicListeners = HashMap<NodeName<*>, ArrayList<RefillEventListener<*>>>()
+    private val keyListListeners = HashMap<KeyListNodeName<*>, ArrayList<RefillEventListener<*>>>()
+    private val fullKeyedListListeners = HashMap<KeyedNodeName<*, *>, ArrayList<RefillEventListener<*>>>()
+    private val keyedValueListeners = HashMap<KeyedNodeName<*, *>, ArrayList<RefillEventListener<*>>>()
 
     init {
         instance.setValueListener { event ->
@@ -94,18 +93,18 @@ class TrickleAsyncInstance(private val instance: TrickleInstance, private val ex
             when (valueId) {
                 is ValueId.Nonkeyed -> {
                     synchronized(basicListeners) {
-                        for (listener in basicListeners[valueId.nodeName] ?: listOf<TrickleEventListener<*>>()) {
+                        for (listener in basicListeners[valueId.nodeName] ?: listOf<RefillEventListener<*>>()) {
                             executor.submit {
-                                (listener as TrickleEventListener<Any?>).receive(event as TrickleEvent<Any?>)
+                                (listener as RefillEventListener<Any?>).receive(event as RefillEvent<Any?>)
                             }
                         }
                     }
                 }
                 is ValueId.FullKeyList -> {
                     synchronized(keyListListeners) {
-                        for (listener in keyListListeners[valueId.nodeName] ?: listOf<TrickleEventListener<*>>()) {
+                        for (listener in keyListListeners[valueId.nodeName] ?: listOf<RefillEventListener<*>>()) {
                             executor.submit {
-                                (listener as TrickleEventListener<Any?>).receive(event as TrickleEvent<Any?>)
+                                (listener as RefillEventListener<Any?>).receive(event as RefillEvent<Any?>)
                             }
                         }
                     }
@@ -115,18 +114,18 @@ class TrickleAsyncInstance(private val instance: TrickleInstance, private val ex
                 }
                 is ValueId.Keyed -> {
                     synchronized(keyedValueListeners) {
-                        for (listener in keyedValueListeners[valueId.nodeName] ?: listOf<TrickleEventListener<*>>()) {
+                        for (listener in keyedValueListeners[valueId.nodeName] ?: listOf<RefillEventListener<*>>()) {
                             executor.submit {
-                                (listener as TrickleEventListener<Any?>).receive(event as TrickleEvent<Any?>)
+                                (listener as RefillEventListener<Any?>).receive(event as RefillEvent<Any?>)
                             }
                         }
                     }
                 }
                 is ValueId.FullKeyedList -> {
                     synchronized(fullKeyedListListeners) {
-                        for (listener in fullKeyedListListeners[valueId.nodeName] ?: listOf<TrickleEventListener<*>>()) {
+                        for (listener in fullKeyedListListeners[valueId.nodeName] ?: listOf<RefillEventListener<*>>()) {
                             executor.submit {
-                                (listener as TrickleEventListener<Any?>).receive(event as TrickleEvent<Any?>)
+                                (listener as RefillEventListener<Any?>).receive(event as RefillEvent<Any?>)
                             }
                         }
                     }
@@ -196,7 +195,7 @@ At some point, we may want to improve how this handles for single-threaded execu
 
         // Note: It may be unintuitive that we have to wait until after getNextSteps() to unlock these, but when we're
         // checking a keyed input that is absent that is related to a present key, we rely on getNextSteps() to populate
-        // the TrickleFailure that says it's absent but expected. That in turn uses a FullKeyedList ValueId (for some
+        // the RefillFailure that says it's absent but expected. That in turn uses a FullKeyedList ValueId (for some
         // reason I forget at the moment) that can get triggered for the given timestamp by an unrelated input.
         // Also, querying your instance for an input value is not a great look to begin with.
         for ((inputList, rawTimestamp) in inputsToAdd.zip(inputRawTimestamps)) {
@@ -235,14 +234,14 @@ At some point, we may want to improve how this handles for single-threaded execu
         // TODO: This needs to make runnables for those steps and pass them to the executor (done)
     }
 
-    private fun updateInputTimestampBarrier(input: TrickleInputChange, newTimestamp: Long) {
+    private fun updateInputTimestampBarrier(input: RefillInputChange, newTimestamp: Long) {
         // TODO: Is this done elsewhere? Should this be a utility method on TIC?
         val valueIds = when (input) {
-            is TrickleInputChange.SetBasic<*> -> listOf(ValueId.Nonkeyed(input.nodeName))
+            is RefillInputChange.SetBasic<*> -> listOf(ValueId.Nonkeyed(input.nodeName))
             // TODO: Can/should we also update ValueId.KeyListKey values? SetKeys doesn't list keys that would get removed...
-            is TrickleInputChange.SetKeys<*> -> listOf(ValueId.FullKeyList(input.nodeName))
-            is TrickleInputChange.EditKeys<*> -> listOf(ValueId.FullKeyList(input.nodeName))
-            is TrickleInputChange.SetKeyed<*, *> -> input.map.keys.map { ValueId.Keyed(input.nodeName, it) } +
+            is RefillInputChange.SetKeys<*> -> listOf(ValueId.FullKeyList(input.nodeName))
+            is RefillInputChange.EditKeys<*> -> listOf(ValueId.FullKeyList(input.nodeName))
+            is RefillInputChange.SetKeyed<*, *> -> input.map.keys.map { ValueId.Keyed(input.nodeName, it) } +
                     listOf(ValueId.FullKeyedList(input.nodeName))
         }
         for (valueId in valueIds) {
@@ -259,7 +258,7 @@ At some point, we may want to improve how this handles for single-threaded execu
         }
     }
 
-    private fun getExecuteJob(step: TrickleStep): Runnable {
+    private fun getExecuteJob(step: RefillStep): Runnable {
         return Runnable {
             val result = step.execute()
 
@@ -281,7 +280,7 @@ At some point, we may want to improve how this handles for single-threaded execu
     }
 
 
-    fun setInputs(changes: List<TrickleInputChange>): TrickleAsyncTimestamp {
+    fun setInputs(changes: List<RefillInputChange>): RefillAsyncTimestamp {
         for (change in changes) {
             if (!(change.nodeName is NodeName<*> && instance.definition.nonkeyedNodes.containsKey(change.nodeName as NodeName<*>))
                     && !(change.nodeName is KeyListNodeName<*> && instance.definition.keyListNodes.containsKey(change.nodeName as KeyListNodeName<*>))
@@ -289,7 +288,7 @@ At some point, we may want to improve how this handles for single-threaded execu
                 throw IllegalArgumentException("Unrecognized node name ${change.nodeName}")
             }
         }
-        val timestamp = TrickleAsyncTimestamp()
+        val timestamp = RefillAsyncTimestamp()
         asyncToRawTimestampMap[timestamp] = CompletableFuture()
         inputsQueue.put(TimestampedInput(changes, timestamp))
         enqueueManagementJob()
@@ -300,37 +299,37 @@ At some point, we may want to improve how this handles for single-threaded execu
         executor.submit(getManagementJob())
     }
 
-    fun <T> setInput(nodeName: NodeName<T>, value: T): TrickleAsyncTimestamp {
-        return setInputs(listOf(TrickleInputChange.SetBasic(nodeName, value)))
+    fun <T> setInput(nodeName: NodeName<T>, value: T): RefillAsyncTimestamp {
+        return setInputs(listOf(RefillInputChange.SetBasic(nodeName, value)))
     }
 
-    fun <T> setInput(nodeName: KeyListNodeName<T>, list: List<T>): TrickleAsyncTimestamp {
-        return setInputs(listOf(TrickleInputChange.SetKeys(nodeName, list)))
+    fun <T> setInput(nodeName: KeyListNodeName<T>, list: List<T>): RefillAsyncTimestamp {
+        return setInputs(listOf(RefillInputChange.SetKeys(nodeName, list)))
     }
 
-    fun <T> addKeyInput(nodeName: KeyListNodeName<T>, key: T): TrickleAsyncTimestamp {
-        return setInputs(listOf(TrickleInputChange.EditKeys(nodeName, listOf(key), listOf())))
+    fun <T> addKeyInput(nodeName: KeyListNodeName<T>, key: T): RefillAsyncTimestamp {
+        return setInputs(listOf(RefillInputChange.EditKeys(nodeName, listOf(key), listOf())))
     }
 
-    fun <T> removeKeyInput(nodeName: KeyListNodeName<T>, key: T): TrickleAsyncTimestamp {
-        return setInputs(listOf(TrickleInputChange.EditKeys(nodeName, listOf(), listOf(key))))
+    fun <T> removeKeyInput(nodeName: KeyListNodeName<T>, key: T): RefillAsyncTimestamp {
+        return setInputs(listOf(RefillInputChange.EditKeys(nodeName, listOf(), listOf(key))))
     }
 
-    fun <T> editKeys(nodeName: KeyListNodeName<T>, keysAdded: List<T>, keysRemoved: List<T>): TrickleAsyncTimestamp {
-        return setInputs(listOf(TrickleInputChange.EditKeys(nodeName, keysAdded, keysRemoved)))
+    fun <T> editKeys(nodeName: KeyListNodeName<T>, keysAdded: List<T>, keysRemoved: List<T>): RefillAsyncTimestamp {
+        return setInputs(listOf(RefillInputChange.EditKeys(nodeName, keysAdded, keysRemoved)))
     }
 
-    fun <K, T> setKeyedInput(nodeName: KeyedNodeName<K, T>, key: K, value: T): TrickleAsyncTimestamp {
-        return setInputs(listOf(TrickleInputChange.SetKeyed(nodeName, mapOf(key to value))))
+    fun <K, T> setKeyedInput(nodeName: KeyedNodeName<K, T>, key: K, value: T): RefillAsyncTimestamp {
+        return setInputs(listOf(RefillInputChange.SetKeyed(nodeName, mapOf(key to value))))
     }
 
-    fun <K, T> setKeyedInputs(nodeName: KeyedNodeName<K, T>, map: Map<K, T>): TrickleAsyncTimestamp {
-        return setInputs(listOf(TrickleInputChange.SetKeyed(nodeName, map)))
+    fun <K, T> setKeyedInputs(nodeName: KeyedNodeName<K, T>, map: Map<K, T>): RefillAsyncTimestamp {
+        return setInputs(listOf(RefillInputChange.SetKeyed(nodeName, map)))
     }
 
     // TODO: Add a variant that waits a limited amount of time
     // TODO: We actually want to accept a variable number of these timestamps
-    fun <T> getOutcome(name: NodeName<T>, vararg minTimestamps: TrickleAsyncTimestamp): NodeOutcome<T> {
+    fun <T> getOutcome(name: NodeName<T>, vararg minTimestamps: RefillAsyncTimestamp): NodeOutcome<T> {
         if (!instance.definition.nonkeyedNodes.containsKey(name)) {
             throw IllegalArgumentException("Unrecognized node name $name")
         }
@@ -339,7 +338,7 @@ At some point, we may want to improve how this handles for single-threaded execu
         return instance.getNodeOutcome(name)
     }
 
-    fun <T> getOutcome(name: NodeName<T>, timeToWait: Long, timeUnits: TimeUnit, vararg minTimestamps: TrickleAsyncTimestamp): NodeOutcome<T> {
+    fun <T> getOutcome(name: NodeName<T>, timeToWait: Long, timeUnits: TimeUnit, vararg minTimestamps: RefillAsyncTimestamp): NodeOutcome<T> {
         if (!instance.definition.nonkeyedNodes.containsKey(name)) {
             throw IllegalArgumentException("Unrecognized node name $name")
         }
@@ -348,11 +347,11 @@ At some point, we may want to improve how this handles for single-threaded execu
         return instance.getNodeOutcome(name)
     }
 
-    private fun waitForTimestamp(valueId: ValueId, minTimestamps: Collection<TrickleAsyncTimestamp>) {
+    private fun waitForTimestamp(valueId: ValueId, minTimestamps: Collection<RefillAsyncTimestamp>) {
         waitForTimestamp(valueId, minTimestamps, Long.MAX_VALUE, TimeUnit.MILLISECONDS)
     }
 
-    private fun waitForTimestamp(initialValueId: ValueId, minTimestamps: Collection<TrickleAsyncTimestamp>, timeToWait: Long, timeUnits: TimeUnit) {
+    private fun waitForTimestamp(initialValueId: ValueId, minTimestamps: Collection<RefillAsyncTimestamp>, timeToWait: Long, timeUnits: TimeUnit) {
         val millisToWait = timeUnits.toMillis(timeToWait)
         val startTime = System.currentTimeMillis()
 
@@ -452,7 +451,7 @@ At some point, we may want to improve how this handles for single-threaded execu
         }
     }
 
-    fun <T> getOutcome(name: KeyListNodeName<T>, vararg minTimestamps: TrickleAsyncTimestamp): NodeOutcome<List<T>> {
+    fun <T> getOutcome(name: KeyListNodeName<T>, vararg minTimestamps: RefillAsyncTimestamp): NodeOutcome<List<T>> {
         if (!instance.definition.keyListNodes.containsKey(name)) {
             throw IllegalArgumentException("Unrecognized node name $name")
         }
@@ -461,7 +460,7 @@ At some point, we may want to improve how this handles for single-threaded execu
         return instance.getNodeOutcome(name)
     }
 
-    fun <T> getOutcome(name: KeyListNodeName<T>, timeToWait: Long, timeUnits: TimeUnit, vararg minTimestamps: TrickleAsyncTimestamp): NodeOutcome<List<T>> {
+    fun <T> getOutcome(name: KeyListNodeName<T>, timeToWait: Long, timeUnits: TimeUnit, vararg minTimestamps: RefillAsyncTimestamp): NodeOutcome<List<T>> {
         if (!instance.definition.keyListNodes.containsKey(name)) {
             throw IllegalArgumentException("Unrecognized node name $name")
         }
@@ -470,7 +469,7 @@ At some point, we may want to improve how this handles for single-threaded execu
         return instance.getNodeOutcome(name)
     }
 
-    fun <K, T> getOutcome(name: KeyedNodeName<K, T>, vararg minTimestamps: TrickleAsyncTimestamp): NodeOutcome<List<T>> {
+    fun <K, T> getOutcome(name: KeyedNodeName<K, T>, vararg minTimestamps: RefillAsyncTimestamp): NodeOutcome<List<T>> {
         if (!instance.definition.keyedNodes.containsKey(name)) {
             throw IllegalArgumentException("Unrecognized node name $name")
         }
@@ -479,7 +478,7 @@ At some point, we may want to improve how this handles for single-threaded execu
         return instance.getNodeOutcome(name)
     }
 
-    fun <K, T> getOutcome(name: KeyedNodeName<K, T>, timeToWait: Long, timeUnits: TimeUnit, vararg minTimestamps: TrickleAsyncTimestamp): NodeOutcome<List<T>> {
+    fun <K, T> getOutcome(name: KeyedNodeName<K, T>, timeToWait: Long, timeUnits: TimeUnit, vararg minTimestamps: RefillAsyncTimestamp): NodeOutcome<List<T>> {
         if (!instance.definition.keyedNodes.containsKey(name)) {
             throw IllegalArgumentException("Unrecognized node name $name")
         }
@@ -488,7 +487,7 @@ At some point, we may want to improve how this handles for single-threaded execu
         return instance.getNodeOutcome(name)
     }
 
-    fun <K, T> getOutcome(name: KeyedNodeName<K, T>, key: K, vararg minTimestamps: TrickleAsyncTimestamp): NodeOutcome<T> {
+    fun <K, T> getOutcome(name: KeyedNodeName<K, T>, key: K, vararg minTimestamps: RefillAsyncTimestamp): NodeOutcome<T> {
         if (!instance.definition.keyedNodes.containsKey(name)) {
             throw IllegalArgumentException("Unrecognized node name $name")
         }
@@ -497,7 +496,7 @@ At some point, we may want to improve how this handles for single-threaded execu
         return instance.getNodeOutcome(name, key)
     }
 
-    fun <K, T> getOutcome(name: KeyedNodeName<K, T>, key: K, timeToWait: Long, timeUnits: TimeUnit, vararg minTimestamps: TrickleAsyncTimestamp): NodeOutcome<T> {
+    fun <K, T> getOutcome(name: KeyedNodeName<K, T>, key: K, timeToWait: Long, timeUnits: TimeUnit, vararg minTimestamps: RefillAsyncTimestamp): NodeOutcome<T> {
         if (!instance.definition.keyedNodes.containsKey(name)) {
             throw IllegalArgumentException("Unrecognized node name $name")
         }
@@ -509,7 +508,7 @@ At some point, we may want to improve how this handles for single-threaded execu
     // TODO: Add some way to unsubscribe (?)
     // TODO: How do we make sure listeners run in order when that's important? Is that something the instance promises
     // to account for when calling listeners, or do we just pass timestamps and make the user take care of it?
-    fun <T> addBasicListener(name: NodeName<T>, listener: TrickleEventListener<T>) {
+    fun <T> addBasicListener(name: NodeName<T>, listener: RefillEventListener<T>) {
         synchronized(basicListeners) {
             basicListeners.getOrPut(name, { ArrayList() }).add(listener)
         }
@@ -520,12 +519,12 @@ At some point, we may want to improve how this handles for single-threaded execu
             when (outcome) {
                 is NodeOutcome.NotYetComputed -> { /* Do nothing */ }
                 is NodeOutcome.NoSuchKey -> TODO()
-                is NodeOutcome.Computed -> listener.receive(TrickleEvent.Computed.of(valueId, outcome.value, -1L))
-                is NodeOutcome.Failure -> listener.receive(TrickleEvent.Failure.of(valueId, outcome.failure, -1L))
+                is NodeOutcome.Computed -> listener.receive(RefillEvent.Computed.of(valueId, outcome.value, -1L))
+                is NodeOutcome.Failure -> listener.receive(RefillEvent.Failure.of(valueId, outcome.failure, -1L))
             }
         }
     }
-    fun <T> addKeyListListener(name: KeyListNodeName<T>, listener: TrickleEventListener<List<T>>) {
+    fun <T> addKeyListListener(name: KeyListNodeName<T>, listener: RefillEventListener<List<T>>) {
         synchronized(keyListListeners) {
             keyListListeners.getOrPut(name, { ArrayList() }).add(listener)
         }
@@ -536,12 +535,12 @@ At some point, we may want to improve how this handles for single-threaded execu
             when (outcome) {
                 is NodeOutcome.NotYetComputed -> { /* Do nothing */ }
                 is NodeOutcome.NoSuchKey -> TODO()
-                is NodeOutcome.Computed -> listener.receive(TrickleEvent.Computed.of(valueId, outcome.value, -1L))
-                is NodeOutcome.Failure -> listener.receive(TrickleEvent.Failure.of(valueId, outcome.failure, -1L))
+                is NodeOutcome.Computed -> listener.receive(RefillEvent.Computed.of(valueId, outcome.value, -1L))
+                is NodeOutcome.Failure -> listener.receive(RefillEvent.Failure.of(valueId, outcome.failure, -1L))
             }
         }
     }
-    fun <K, T> addKeyedListListener(name: KeyedNodeName<K, T>, listener: TrickleEventListener<List<T>>) {
+    fun <K, T> addKeyedListListener(name: KeyedNodeName<K, T>, listener: RefillEventListener<List<T>>) {
         synchronized(fullKeyedListListeners) {
             fullKeyedListListeners.getOrPut(name, { ArrayList() }).add(listener)
         }
@@ -552,12 +551,12 @@ At some point, we may want to improve how this handles for single-threaded execu
             when (outcome) {
                 is NodeOutcome.NotYetComputed -> { /* Do nothing */ }
                 is NodeOutcome.NoSuchKey -> TODO()
-                is NodeOutcome.Computed -> listener.receive(TrickleEvent.Computed.of(valueId, outcome.value, -1L))
-                is NodeOutcome.Failure -> listener.receive(TrickleEvent.Failure.of(valueId, outcome.failure, -1L))
+                is NodeOutcome.Computed -> listener.receive(RefillEvent.Computed.of(valueId, outcome.value, -1L))
+                is NodeOutcome.Failure -> listener.receive(RefillEvent.Failure.of(valueId, outcome.failure, -1L))
             }
         }
     }
-    fun <K, T> addPerKeyListener(name: KeyedNodeName<K, T>, listener: TrickleEventListener<T>) {
+    fun <K, T> addPerKeyListener(name: KeyedNodeName<K, T>, listener: RefillEventListener<T>) {
         synchronized(keyedValueListeners) {
             keyedValueListeners.getOrPut(name, { ArrayList() }).add(listener)
         }
@@ -575,14 +574,14 @@ At some point, we may want to improve how this handles for single-threaded execu
                             is NodeOutcome.NotYetComputed -> { /* Do nothing */ }
                             is NodeOutcome.NoSuchKey -> TODO()
                             is NodeOutcome.Computed -> listener.receive(
-                                TrickleEvent.Computed.of(
+                                RefillEvent.Computed.of(
                                     valueId,
                                     outcome.value,
                                     -1L
                                 )
                             )
                             is NodeOutcome.Failure -> listener.receive(
-                                TrickleEvent.Failure.of(
+                                RefillEvent.Failure.of(
                                     valueId,
                                     outcome.failure,
                                     -1L

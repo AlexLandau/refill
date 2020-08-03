@@ -10,7 +10,7 @@ import java.util.LinkedHashSet
  * Only the KeyList is shared with the main instance implementation.
  */
 // TODO: Catching errors in nodes is not implemented in the fuzz tests and thus not implemented here
-internal class ReferenceInstance(private val definition: TrickleDefinition) {
+internal class ReferenceInstance(private val definition: RefillDefinition) {
     private val basicInputs = HashMap<NodeName<Int>, Int?>()
     private val keyListInputs = HashMap<KeyListNodeName<Int>, KeyList<Int>>()
     private val keyedInputs = HashMap<KeyedNodeName<Int, Int>, HashMap<Int, Int>>()
@@ -129,17 +129,17 @@ internal class ReferenceInstance(private val definition: TrickleDefinition) {
         }
     }
 
-    private fun getInputValuesOrCombinedFailure(inputs: List<TrickleInput<*>>, curKey: Int?): ValueOrFailure<List<*>> {
+    private fun getInputValuesOrCombinedFailure(inputs: List<RefillInput<*>>, curKey: Int?): ValueOrFailure<List<*>> {
         val allInputs = ArrayList<Any?>()
-        val allFailures = ArrayList<TrickleFailure>()
+        val allFailures = ArrayList<RefillFailure>()
         perInputLoop@for (input in inputs) {
             when (input) {
-                is TrickleBuiltNode -> {
+                is RefillBuiltNode -> {
                     val name = input.name
                     if (isInput(name)) {
                         val valueMaybe = basicInputs[name]
                         if (valueMaybe == null) {
-                            allFailures.add(TrickleFailure(mapOf(), setOf(ValueId.Nonkeyed(name))))
+                            allFailures.add(RefillFailure(mapOf(), setOf(ValueId.Nonkeyed(name))))
                         } else {
                             allInputs.add(valueMaybe)
                         }
@@ -154,7 +154,7 @@ internal class ReferenceInstance(private val definition: TrickleDefinition) {
                         }
                     }
                 }
-                is TrickleInput.KeyList<*> -> {
+                is RefillInput.KeyList<*> -> {
                     val name = input.name
                     if (isInput(name)) {
                         allInputs.add(keyListInputs[name]!!.list)
@@ -169,13 +169,13 @@ internal class ReferenceInstance(private val definition: TrickleDefinition) {
                         }
                     }
                 }
-                is TrickleInput.Keyed<*, *> -> {
+                is RefillInput.Keyed<*, *> -> {
                     curKey ?: error("Expected a key to be specified")
                     val name = input.name
                     if (isInput(name)) {
                         val result = keyedInputs[name]!![curKey]
                         if (result == null) {
-                            allFailures.add(TrickleFailure(mapOf(), setOf(ValueId.Keyed(name, curKey))))
+                            allFailures.add(RefillFailure(mapOf(), setOf(ValueId.Keyed(name, curKey))))
                         } else {
                             allInputs.add(result)
                         }
@@ -190,7 +190,7 @@ internal class ReferenceInstance(private val definition: TrickleDefinition) {
                         }
                     }
                 }
-                is TrickleInput.FullKeyedList<*, *> -> {
+                is RefillInput.FullKeyedList<*, *> -> {
                     val name = input.name
                     val keySourceName = definition.keyedNodes[name]!!.keySourceName
                     val keyList: List<Int> = if (isInput(keySourceName)) {
@@ -208,14 +208,14 @@ internal class ReferenceInstance(private val definition: TrickleDefinition) {
                         }
                     }
                     val allKeyedValues = ArrayList<Int>()
-                    val allKeyedFailures = ArrayList<TrickleFailure>()
+                    val allKeyedFailures = ArrayList<RefillFailure>()
                     if (isInput(name)) {
                         for (key in keyList) {
                             val valueMaybe = keyedInputs[name]!![key]
                             if (valueMaybe != null) {
                                 allKeyedValues.add(valueMaybe)
                             } else {
-                                allKeyedFailures.add(TrickleFailure(mapOf(), setOf(ValueId.Keyed(name, key))))
+                                allKeyedFailures.add(RefillFailure(mapOf(), setOf(ValueId.Keyed(name, key))))
                             }
                         }
                     } else {
@@ -282,20 +282,20 @@ internal class ReferenceInstance(private val definition: TrickleDefinition) {
         recomputeState()
     }
 
-    fun setInputs(changes: List<TrickleInputChange>) {
+    fun setInputs(changes: List<RefillInputChange>) {
         for (change in changes) {
             when (change) {
-                is TrickleInputChange.SetBasic<*> -> setInput(change.nodeName as NodeName<Int>, change.value as Int)
-                is TrickleInputChange.SetKeys<*> -> setInput(change.nodeName as KeyListNodeName<Int>, change.value as List<Int>)
-                is TrickleInputChange.EditKeys<*> -> editKeys(change.nodeName as KeyListNodeName<Int>, change.keysAdded as List<Int>, change.keysRemoved as List<Int>)
-                is TrickleInputChange.SetKeyed<*, *> -> setKeyedInputs(change.nodeName as KeyedNodeName<Int, Int>, change.map as Map<Int, Int>)
+                is RefillInputChange.SetBasic<*> -> setInput(change.nodeName as NodeName<Int>, change.value as Int)
+                is RefillInputChange.SetKeys<*> -> setInput(change.nodeName as KeyListNodeName<Int>, change.value as List<Int>)
+                is RefillInputChange.EditKeys<*> -> editKeys(change.nodeName as KeyListNodeName<Int>, change.keysAdded as List<Int>, change.keysRemoved as List<Int>)
+                is RefillInputChange.SetKeyed<*, *> -> setKeyedInputs(change.nodeName as KeyedNodeName<Int, Int>, change.map as Map<Int, Int>)
             }
         }
     }
 
     fun getNodeOutcome(name: NodeName<Int>): NodeOutcome<Int> {
         if (isInput(name)) {
-            return basicInputs[name]?.let { NodeOutcome.Computed(it) } ?: NodeOutcome.Failure(TrickleFailure(mapOf(), setOf(ValueId.Nonkeyed(name))))
+            return basicInputs[name]?.let { NodeOutcome.Computed(it) } ?: NodeOutcome.Failure(RefillFailure(mapOf(), setOf(ValueId.Nonkeyed(name))))
         } else {
             when (val result = basicOutputs[name]) {
                 null -> {
@@ -342,14 +342,14 @@ internal class ReferenceInstance(private val definition: TrickleDefinition) {
             is NodeOutcome.Computed -> {
                 val keyList = keyListOutcome.value
                 val allKeyedValues = ArrayList<Int>()
-                val allFailures = ArrayList<TrickleFailure>()
+                val allFailures = ArrayList<RefillFailure>()
                 for (key in keyList) {
                     if (isInput(name)) {
                         val valueMaybe = keyedInputs[name]!![key]
                         if (valueMaybe != null) {
                             allKeyedValues.add(valueMaybe)
                         } else {
-                            allFailures.add(TrickleFailure(mapOf(), setOf(ValueId.Keyed(name, key))))
+                            allFailures.add(RefillFailure(mapOf(), setOf(ValueId.Keyed(name, key))))
                         }
                     } else {
                         val resultsMap = keyedOutputs[name]
@@ -396,7 +396,7 @@ internal class ReferenceInstance(private val definition: TrickleDefinition) {
                 if (isInput(name)) {
                     val result = keyedInputs[name]!![key]
                     if (result == null) {
-                        return NodeOutcome.Failure(TrickleFailure(mapOf(), setOf(ValueId.Keyed(name, key))))
+                        return NodeOutcome.Failure(RefillFailure(mapOf(), setOf(ValueId.Keyed(name, key))))
                     } else {
                         return NodeOutcome.Computed(result)
                     }
@@ -436,15 +436,15 @@ internal class ReferenceInstance(private val definition: TrickleDefinition) {
 
 private sealed class ValueOrFailure<T> {
     data class Value<T>(val value: T): ValueOrFailure<T>()
-    data class Failure<T>(val failure: TrickleFailure): ValueOrFailure<T>()
+    data class Failure<T>(val failure: RefillFailure): ValueOrFailure<T>()
 }
 
-private fun combineFailures(inputFailures: List<TrickleFailure>): TrickleFailure {
+private fun combineFailures(inputFailures: List<RefillFailure>): RefillFailure {
     val allErrors = LinkedHashMap<ValueId, Throwable>()
     val allMissingInputs = LinkedHashSet<ValueId>()
     for (failure in inputFailures) {
         allErrors.putAll(failure.errors)
         allMissingInputs.addAll(failure.missingInputs)
     }
-    return TrickleFailure(allErrors, allMissingInputs)
+    return RefillFailure(allErrors, allMissingInputs)
 }

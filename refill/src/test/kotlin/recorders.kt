@@ -2,14 +2,18 @@ package net.semlang.refill
 
 import java.util.ArrayList
 
-internal class RecordingRawInstance(val delegate: TrickleInstance): TrickleRawInstance {
-    override val definition: TrickleDefinition
+/**
+ * This may be useful when debugging tests; it wraps a RefillInstance and makes it possible to see the various calls
+ * made to its methods and their results.
+ */
+internal class RecordingRawInstance(val delegate: RefillInstance): RefillRawInstance {
+    override val definition: RefillDefinition
         get() = delegate.definition
     // It would be nice to record these as actual objects, but that would take some effort
     val records = ArrayList<String>()
 
     @Synchronized
-    override fun setInputs(changes: List<TrickleInputChange>): Long {
+    override fun setInputs(changes: List<RefillInputChange>): Long {
         records.add("Calling setInputs")
         records.add("  changes: $changes")
         val result = delegate.setInputs(changes)
@@ -79,7 +83,7 @@ internal class RecordingRawInstance(val delegate: TrickleInstance): TrickleRawIn
     }
 
     @Synchronized
-    override fun getNextSteps(): List<TrickleStep> {
+    override fun getNextSteps(): List<RefillStep> {
         records.add("Calling getNextSteps")
         val result = delegate.getNextSteps()
         records.add("  result: $result")
@@ -94,7 +98,7 @@ internal class RecordingRawInstance(val delegate: TrickleInstance): TrickleRawIn
     }
 
     @Synchronized
-    override fun reportResult(result: TrickleStepResult) {
+    override fun reportResult(result: RefillStepResult) {
         records.add("Calling reportResult")
         records.add("  result (arg): $result")
         delegate.reportResult(result)
