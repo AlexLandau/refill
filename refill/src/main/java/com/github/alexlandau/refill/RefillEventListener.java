@@ -1,4 +1,4 @@
-package net.semlang.refill;
+package com.github.alexlandau.refill;
 
 /**
  * (TODO: document)

@@ -1,4 +1,4 @@
-package net.semlang.refill
+package com.github.alexlandau.refill
 
 import org.junit.Test
 import java.lang.IllegalArgumentException

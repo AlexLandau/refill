@@ -1,4 +1,4 @@
-package net.semlang.refill
+package com.github.alexlandau.refill
 
 import java.lang.IllegalArgumentException
 import java.lang.IllegalStateException
