@@ -12,5 +12,5 @@ dependencies {
 
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit")
-    testImplementation 'org.awaitility:awaitility:3.1.6'
+    testImplementation("org.awaitility:awaitility:3.1.6")
 }

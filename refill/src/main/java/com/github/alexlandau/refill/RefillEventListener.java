@@ -10,6 +10,7 @@ package com.github.alexlandau.refill;
 /*
  * Note: This is implemented in Java instead of Kotlin because doing so allows Kotlin lambda expressions to implement
  * this.
+ * TODO: Fix this in Kotlin 1.4.
  */
 @FunctionalInterface
 public interface RefillEventListener<T> {
