@@ -1,0 +1,107 @@
+Notes from 8/12/20:
+
+- Change builder to not require the use of additional objects; just use the keys of inputs and check at runtime
+- Builder should include more methods with a number of typed arguments
+
+- What are the options around using timestamp checks vs. value equality checks?
+
+- Can we have builders split up into more separate function calls so we don't need a ridiculous number of functions to
+  look through to handle all the differing numbers of inputs? (And should things like equality checks be settable at the
+  key level?)
+
+- Explore the areas in which "keyed keyed" nodes would be helpful
+- Explore the areas in which different kinds of nodes could be more optimized than the current semantics
+
+- Can it be made feasible to allow a definition to change after it's already been built and is in use?
+  - Maybe additive-only? What would removal look like? What if removal just means things get ignored? What if no listeners
+    means things get ignored in async mode?
+  - Explore this type of composition more
+
+- Consider a version that uses annotation processors to modify FooOperation into SyncFooOperation and AsyncFooOperation
+  - This would allow a typed constructor requiring the inputs to be set already, and getter methods instead of keys
+  - Idea was to have RefillList, RefillMap, RefillSet, maybe RefillBag internally to designate where these calculations
+    can/should be split up
+
+- Could we have functions to create the current instances that require all inputs to be set to a value?
+
+- Would it make sense to merge the "no inputs" and "error" functionality via a RefillInputNotSetException?
+
+Okay, consider an example of something fairly complex:
+* We dump XML files of Wikipedia entries into a folder
+* File watcher detects when these change, and prompts updates
+* Each XML file is read into a variable (? -- do we want to store the actual contents of these?)
+* Possible optimization: The XML file is pre-split into sections using a lexer only; look for identical sections here
+* Parse into data objects for individual articles
+* Collect the total word counts of all articles in each category
+
+How would that work in the current system?
+Key list: Per-file
+File watcher updates a timestamp for the file, triggering re-reading the file
+Within the key, do parsing on the file, and also get a list of those objects
+Can't really currently have keys for the XML subsets within the keys...
+Collect a list of all the objects into a new key list (note: this gets re-collected in full whenever something changes)
+
+Something more fine-grained may look like:
+Without XML lexer optimization:
+* CollectionNode (set/sorted list): the file names
+* MappedNode of file name list: The file contents
+* MappedNode of previous MappedNode: The list of parsed XML objects for the given file
+* FlatMappedNode (type of collection node) of previous MappedNode: All the XML objects, as the new key (index?) collection
+* MappedNode of previous FlatMappedNode: The processed objects, from the XML objects
+First iteration of this new approach may not have a great solution for the final word counts per category thing. It
+can use a FlatMappedSetNode (?) to get the list of categories that exist... actually, a custom reduction node could
+probably collect it directly?
+* MappedNode of previous MappedNode: Per article, a map from the categories of the article to its word count (or equivalent)
+* Custom ReductionNode (possibly a special name to denote it can be recomputed from updates alone?) of previous
+  MappedNode, combining sums from the maps
+
+(Note: MappedNodes should be able to map "from" multiple inputs rooted in the same collection, not just one as the term
+"map" would usually imply)
+
+Multiple types of nodes are related to the concept of a collection... a node can have as its result a single value or
+a collection that can be meaningfully indexed in some way.
+- Basic node: A node that is not keyed on a collection and produces a single value.
+- Collection node: A node that is not keyed on its production of anything, but produces an indexable collection.
+- Mapped node: A node that is keyed on a collection and produces an identical number of outputs with the same keys. Note
+  that this can have any number of input nodes, so long as they are all keyed on the same origin collection.
+- Flat mapped node: A node that takes an indexable collection and produces a different kind of output collection. This
+  can take some care to ensure that this can be updated without rewriting the output from scratch (though if the work is
+  factored correctly, that may not matter as much).
+- Reduction node: A node that takes an indexable collection and produces a single value. Similar caveats to the flat
+  mapped nodes apply here.
+Should the flat mapped and reduction nodes also be able to have multiple inputs? Maybe not; it may be better to encourage
+people to use a standard set of mappings/reductions that are written more carefully, and have any mapping of the data
+done in a previous step.
+
+So these differ in these properties:
+- Has at least one keyed/indexed input, or not (all such inputs must share the same indexing/keying scheme)
+- Output is a single value, or output is a collection
+- Output collection uses the same keying as the input collection, or not (if is keyed and output has a collection)
+
+Then there's the question of input nodes. (What's the current state of refill? We did end up using keyed input nodes.)
+We'll need input basic nodes, input collection nodes, and probably some method of specifying inputs for things related
+to a collection as well; though if we distinguish between collection elements and their indices/keys, it might be feasible
+to just have collections as the input point. (Or have input collections that can be added to/modified instead of having
+atomic replacement!) It looks like in the previous use case, associated input values were the text of files, which I
+didn't want to have as part of the keys. Also, when these inputs were set, they were combined into a single composite
+input operation. Having e.g. a map collection node that is an input (with put/set/remove operations, etc.) would fulfill
+this use case.
+
+Something that would be nice to preserve from the current Refill implementation is that if something is modified by
+such a compound action, you only see results that make sense for some single holistic timestamp.
+Properties and design choices like that:
+1. Ability to make either a sync or async instance out of a definition (and the underlying thing can be tested by both!)
+2. Non-determinism isn't introduced by the library
+9. Also note to users that overhead will be dependent on how it is used, and is not a top priority
+
+Additional stuff to add:
+1. A logger interface that can be implemented by e.g. a refill-logger-slf4j module or a null or custom implementation
+2. More methods around reporting the state of when you're computing, etc.
+3. Ability to serialize and resume the current (consistent) state of the graph; full values in some places, hashes in
+   others; use an additional module like refill-serializer-jackson for implementations of this
+
+How do we get from here to there?
+0. Probably make the Wikipedia example and have notional code of what's needed there
+1. The old KeyListNode becomes a type of CollectionNode
+2. Replace the list-type inputs with reduction nodes; can now use node IDs to define inputs
+3. Get rid of keyed input nodes; make a map type of collection nodes
